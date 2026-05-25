@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}{{ student.full_name }} | Student Case Tracker{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">{{ student.full_name }}</h1>
+        <p class="text-muted mb-0">{{ student.student_id }} | Grade {{ student.grade }} | {{ student.nationality }}</p>
+    </div>
+    {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+        <a class="btn btn-primary" href="{% url 'student_update' student.pk %}">Edit Student</a>
+    {% endif %}
+</div>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <ul class="nav nav-tabs card-header-tabs">
+            <li class="nav-item"><a class="nav-link {% if active_tab == 'overview' %}active{% endif %}" href="?tab=overview">Overview</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_tab == 'notes' %}active{% endif %}" href="?tab=notes">Notes</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_tab == 'tasks' %}active{% endif %}" href="?tab=tasks">Tasks</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_tab == 'documents' %}active{% endif %}" href="?tab=documents">Documents</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_tab == 'communication' %}active{% endif %}" href="?tab=communication">Communication Log</a></li>
+        </ul>
+    </div>
+</div>
+
+{% if active_tab == 'overview' %}
+    <div class="row g-4">
+        <div class="col-lg-6"><div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Case overview</h2></div><div class="card-body detail-grid">
+            <div><strong>Assigned counsellor:</strong> {{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</div>
+            <div><strong>Agency:</strong> {{ student.agency|default:"-" }}</div>
+            <div><strong>Preferred language:</strong> {{ student.preferred_language|default:"-" }}</div>
+            <div><strong>Target country:</strong> {{ student.target_country|default:"-" }}</div>
+            <div><strong>Target program:</strong> {{ student.target_program|default:"-" }}</div>
+            <div><strong>Universities:</strong> {{ student.target_universities|default:"-" }}</div>
+            <div><strong>Academic status:</strong> {{ student.get_academic_status_display }}</div>
+            <div><strong>OSSD credits:</strong> {{ student.get_ossd_credit_progress_display }}</div>
+            <div><strong>Graduation:</strong> {{ student.get_graduation_status_display }}</div>
+            <div><strong>Counselling:</strong> {{ student.get_counselling_status_display }}</div>
+            <div><strong>Application status:</strong> {{ student.get_university_application_status_display }}</div>
+            <div><strong>Risk level:</strong> {{ student.get_overall_risk_level_display }}</div>
+            <div><strong>Payment status:</strong> {{ student.get_payment_status_display }}</div>
+            <div><strong>Homestay status:</strong> {{ student.get_homestay_status_display }}</div>
+            <div><strong>Insurance status:</strong> {{ student.get_insurance_status_display }}</div>
+        </div></div></div>
+        <div class="col-lg-6"><div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Family and internal summary</h2></div><div class="card-body">
+            <p><strong>Parent/guardian:</strong> {{ student.parent_guardian_name|default:"-" }}</p>
+            <p><strong>Email:</strong> {{ student.parent_guardian_email|default:"-" }}</p>
+            <p><strong>Phone:</strong> {{ student.parent_guardian_phone|default:"-" }}</p>
+            <p><strong>IELTS/English status:</strong> {{ student.ielts_english_status|default:"-" }}</p>
+            <p><strong>Attendance concerns:</strong><br>{{ student.attendance_concerns|default:"No concerns recorded." }}</p>
+            <p class="mb-0"><strong>Internal summary:</strong><br>{{ student.internal_summary|default:"No summary yet." }}</p>
+        </div></div></div>
+    </div>
+{% elif active_tab == 'notes' %}
+    <div class="row g-4">
+        <div class="col-lg-5">
+            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+                <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Add note</h2></div><div class="card-body">
+                    <form method="post" action="{% url 'student_note_add' student.pk %}">
+                        {% csrf_token %}
+                        {{ note_form.as_p }}
+                        <button class="btn btn-primary" type="submit">Save note</button>
+                    </form>
+                </div></div>
+            {% endif %}
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Notes history</h2></div><div class="list-group list-group-flush">
+                {% for note in student.notes.all %}
+                    <div class="list-group-item">
+                        <div class="fw-semibold">{{ note.author.get_full_name|default:note.author.username }}</div>
+                        <div class="small text-muted mb-2">{{ note.created_at|date:"M j, Y g:i A" }}</div>
+                        <div>{{ note.note|linebreaksbr }}</div>
+                    </div>
+                {% empty %}
+                    <div class="list-group-item text-muted">No notes yet.</div>
+                {% endfor %}
+            </div></div>
+        </div>
+    </div>
+{% elif active_tab == 'tasks' %}
+    <div class="row g-4">
+        <div class="col-lg-5">
+            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+                <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Create task</h2></div><div class="card-body">
+                    <form method="post" action="{% url 'student_task_add' student.pk %}">
+                        {% csrf_token %}
+                        {{ task_form.as_p }}
+                        <button class="btn btn-primary" type="submit">Create task</button>
+                    </form>
+                </div></div>
+            {% endif %}
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Task list</h2></div><div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Task</th><th>Due</th><th>Priority</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for task in student.tasks.all %}
+                            <tr><td>{{ task.title }}</td><td>{{ task.due_date }}</td><td>{{ task.get_priority_display }}</td><td>{{ task.get_status_display }}</td></tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-muted text-center py-4">No tasks yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div></div>
+        </div>
+    </div>
+{% elif active_tab == 'documents' %}
+    <div class="row g-4">
+        <div class="col-lg-5">
+            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+                <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Add document item</h2></div><div class="card-body">
+                    <form method="post" action="{% url 'student_document_add' student.pk %}">
+                        {% csrf_token %}
+                        {{ document_form.as_p }}
+                        <button class="btn btn-primary" type="submit">Save document</button>
+                    </form>
+                </div></div>
+            {% endif %}
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Document checklist</h2></div><div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Document</th><th>Status</th><th>Due date</th><th>Notes</th></tr></thead>
+                    <tbody>
+                        {% for document in student.documents.all %}
+                            <tr><td>{{ document.document_name }}</td><td>{{ document.get_status_display }}</td><td>{{ document.due_date|default:"-" }}</td><td>{{ document.notes|default:"-" }}</td></tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-4">No document requirements yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div></div>
+        </div>
+    </div>
+{% elif active_tab == 'communication' %}
+    <div class="row g-4">
+        <div class="col-lg-5">
+            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+                <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Add communication log</h2></div><div class="card-body">
+                    <form method="post" action="{% url 'student_communication_add' student.pk %}">
+                        {% csrf_token %}
+                        {{ communication_form.as_p }}
+                        <button class="btn btn-primary" type="submit">Save communication</button>
+                    </form>
+                </div></div>
+            {% endif %}
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Communication history</h2></div><div class="list-group list-group-flush">
+                {% for communication in student.communications.all %}
+                    <div class="list-group-item">
+                        <div class="fw-semibold">{{ communication.get_method_display }} | {{ communication.contact_person }}</div>
+                        <div class="small text-muted mb-2">{{ communication.communicated_at|date:"M j, Y g:i A" }} | {{ communication.get_direction_display }}</div>
+                        <div>{{ communication.summary }}</div>
+                    </div>
+                {% empty %}
+                    <div class="list-group-item text-muted">No communication logs yet.</div>
+                {% endfor %}
+            </div></div>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

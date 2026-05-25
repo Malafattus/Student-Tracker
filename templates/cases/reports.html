@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Reports | Student Case Tracker{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 mb-1">Reports</h1>
+    <p class="text-muted mb-0">Management-ready summaries for weekly oversight and counsellor workload reviews.</p>
+</div>
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Weekly management summary</h2></div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">New students this week: <strong>{{ weekly_summary.new_students }}</strong></li>
+                    <li class="mb-2">Updated student records: <strong>{{ weekly_summary.updated_students }}</strong></li>
+                    <li class="mb-2">Completed tasks: <strong>{{ weekly_summary.completed_tasks }}</strong></li>
+                    <li>Urgent-risk students: <strong>{{ weekly_summary.urgent_students }}</strong></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Counsellor activity summary</h2></div>
+            <div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Counsellor</th><th>Assigned students</th><th>Open tasks</th></tr></thead>
+                    <tbody>
+                        {% for user in counsellor_activity %}
+                            <tr><td>{{ user.get_full_name|default:user.username }}</td><td>{{ user.student_total }}</td><td>{{ user.open_tasks }}</td></tr>
+                        {% empty %}
+                            <tr><td colspan="3" class="text-center text-muted py-4">No counsellor data available.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Student case summary</h2></div>
+            <div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Student</th><th>Counsellor</th><th>Application</th><th>Risk</th><th>Updated</th></tr></thead>
+                    <tbody>
+                        {% for student in student_case_summary %}
+                            <tr><td><a href="{{ student.get_absolute_url }}">{{ student.full_name }}</a></td><td>{{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</td><td>{{ student.get_university_application_status_display }}</td><td>{{ student.get_overall_risk_level_display }}</td><td>{{ student.updated_at|date:"M j, Y" }}</td></tr>
+                        {% empty %}
+                            <tr><td colspan="5" class="text-center text-muted py-4">No case data available.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Overdue follow-up report</h2></div>
+            <div class="list-group list-group-flush">
+                {% for task in overdue_tasks %}
+                    <div class="list-group-item">
+                        <div class="fw-semibold">{{ task.title }}</div>
+                        <div><a href="{{ task.student.get_absolute_url }}">{{ task.student.full_name }}</a></div>
+                        <div class="small text-muted">Due {{ task.due_date }} | {{ task.get_priority_display }}</div>
+                    </div>
+                {% empty %}
+                    <div class="list-group-item text-muted">No overdue tasks.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "site": "student-case-tracker",
+    "public": "firebase-hosting-placeholder",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "student-case-tracker",
+          "region": "us-central1",
+          "pinTag": true
+        }
+      }
+    ]
+  }
+}

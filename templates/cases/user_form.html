@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Edit User | Student Case Tracker{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 mb-1">Edit User</h1>
+    <p class="text-muted mb-0">Update account details, role, or password.</p>
+</div>
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button class="btn btn-primary" type="submit">Save changes</button>
+            <a class="btn btn-outline-secondary" href="{% url 'user_management' %}">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

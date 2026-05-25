@@ -1,0 +1,29 @@
+databases:
+  - name: student-case-tracker-db
+    databaseName: student_case_tracker
+    user: student_case_tracker
+    plan: free
+
+services:
+  - type: web
+    name: student-case-tracker
+    runtime: python
+    plan: free
+    buildCommand: "bash build.sh"
+    startCommand: "gunicorn student_case_tracker.wsgi:application"
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.13
+      - key: DATABASE_URL
+        fromDatabase:
+          name: student-case-tracker-db
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: "student-case-tracker.onrender.com,.onrender.com"
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: "https://student-case-tracker.onrender.com"

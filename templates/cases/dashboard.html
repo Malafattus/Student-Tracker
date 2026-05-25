@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | Student Case Tracker{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">Dashboard</h1>
+        <p class="text-muted mb-0">Live view of student cases, workload, and urgent follow-up needs.</p>
+    </div>
+    {% if role_flags.is_admin or role_flags.is_counsellor %}
+        <a class="btn btn-primary" href="{% url 'student_create' %}">Add New Student</a>
+    {% endif %}
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Total active students</div><div class="stat-value">{{ stats.active_students }}</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Students requiring follow-up</div><div class="stat-value">{{ stats.follow_up }}</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card urgent"><div class="card-body"><div class="stat-label">Urgent-risk students</div><div class="stat-value">{{ stats.urgent_risk }}</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card warning"><div class="card-body"><div class="stat-label">Overdue tasks</div><div class="stat-value">{{ stats.overdue_tasks }}</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Missing documents</div><div class="stat-value">{{ stats.missing_documents }}</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Payment issues</div><div class="stat-value">{{ stats.payment_issues }}</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Homestay issues</div><div class="stat-value">{{ stats.homestay_issues }}</div></div></div></div>
+</div>
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h2 class="h5 mb-0">Recently updated students</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Name</th><th>Grade</th><th>Counsellor</th><th>Risk</th><th>Updated</th></tr></thead>
+                    <tbody>
+                        {% for student in recent_students %}
+                            <tr>
+                                <td><a href="{{ student.get_absolute_url }}">{{ student.full_name }}</a></td>
+                                <td>{{ student.grade }}</td>
+                                <td>{{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</td>
+                                <td><span class="badge text-bg-secondary">{{ student.get_overall_risk_level_display }}</span></td>
+                                <td>{{ student.updated_at|date:"M j, Y g:i A" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="5" class="text-center text-muted py-4">No students yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h2 class="h5 mb-0">Recent audit activity</h2>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for item in recent_audit_logs %}
+                    <div class="list-group-item">
+                        <div class="fw-semibold">{{ item.action|title }} {{ item.model_name }}</div>
+                        <div class="small text-muted">{{ item.object_repr }}</div>
+                        <div class="small text-muted">{{ item.created_at|date:"M j, Y g:i A" }}</div>
+                    </div>
+                {% empty %}
+                    <div class="list-group-item text-muted">No recent activity yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

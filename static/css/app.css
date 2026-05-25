@@ -1,0 +1,51 @@
+body {
+    background: #f4f7fb;
+    color: #223046;
+}
+
+.navbar.bg-primary {
+    background: linear-gradient(135deg, #1f4e79, #315f9b) !important;
+}
+
+.login-page {
+    background: linear-gradient(135deg, #1b3f62, #4e88c7);
+}
+
+.card {
+    border: 1px solid #dfe7f3;
+    border-radius: 1rem;
+}
+
+.stat-card {
+    min-height: 132px;
+}
+
+.stat-card .stat-label {
+    color: #63748a;
+    font-size: 0.95rem;
+    margin-bottom: 0.75rem;
+}
+
+.stat-card .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.stat-card.warning {
+    background: #fff7ec;
+}
+
+.stat-card.urgent {
+    background: #fff1f1;
+}
+
+.detail-grid {
+    display: grid;
+    gap: 0.85rem;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+}

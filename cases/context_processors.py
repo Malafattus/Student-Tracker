@@ -1,0 +1,12 @@
+from .permissions import is_admin, is_counsellor, is_viewer
+
+
+def app_context(request):
+    user = request.user
+    return {
+        "role_flags": {
+            "is_admin": is_admin(user),
+            "is_counsellor": is_counsellor(user),
+            "is_viewer": is_viewer(user),
+        }
+    }

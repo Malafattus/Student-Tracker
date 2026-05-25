@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}User Management | Student Case Tracker{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 mb-1">Admin User Management</h1>
+    <p class="text-muted mb-0">Create and maintain Admin, Counsellor, and Viewer accounts.</p>
+</div>
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Add user</h2></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button class="btn btn-primary" type="submit">Create user</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Existing users</h2></div>
+            <div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th></th></tr></thead>
+                    <tbody>
+                        {% for user in users %}
+                            <tr>
+                                <td>{{ user.get_full_name|default:"-" }}</td>
+                                <td>{{ user.username }}</td>
+                                <td>{{ user.email }}</td>
+                                <td>{{ user.groups.first.name|default:"-" }}</td>
+                                <td><a class="btn btn-sm btn-outline-primary" href="{% url 'user_update' user.pk %}">Edit</a></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
