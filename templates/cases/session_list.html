@@ -8,6 +8,9 @@
     </div>
     <a class="btn btn-primary" href="{% url 'session_create' %}">Book Session</a>
 </div>
+<div class="alert alert-light border mb-4">
+    <strong>Workflow tip:</strong> approve counselling requests from the request queue, then book the session here. Approved requests show in the pending section below until a slot is booked.
+</div>
 <div class="card shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3">
@@ -40,7 +43,9 @@
                             <td class="{% if not day.in_month %}bg-light text-muted{% endif %}" style="width:14%; min-width:150px; height:150px;">
                                 <div class="small fw-semibold mb-2">{{ day.date|date:"M j" }}</div>
                                 {% for request_item in day.requests %}
-                                    <div class="badge text-bg-warning text-wrap mb-1 d-block">Request: {{ request_item.student.full_name|default:request_item.submitted_by_name }}</div>
+                                    <div class="badge {% if request_item.status == 'approved' %}text-bg-success{% else %}text-bg-warning{% endif %} text-wrap mb-1 d-block">
+                                        {{ request_item.get_status_display }} request: {{ request_item.student.full_name|default:request_item.submitted_by_name }}
+                                    </div>
                                 {% endfor %}
                                 {% for session in day.sessions %}
                                     <div class="small border rounded p-1 mb-1">

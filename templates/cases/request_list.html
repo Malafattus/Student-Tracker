@@ -8,6 +8,12 @@
     </div>
     <a class="btn btn-outline-primary" href="{% url 'student_request_public' %}" target="_blank">Open public form</a>
 </div>
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">New</div><div class="h3 mb-0">{{ request_status_summary.new }}</div></div></div></div>
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">In Review</div><div class="h3 mb-0">{{ request_status_summary.in_review }}</div></div></div></div>
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Approved</div><div class="h3 mb-0">{{ request_status_summary.approved }}</div></div></div></div>
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Completed</div><div class="h3 mb-0">{{ request_status_summary.completed }}</div></div></div></div>
+</div>
 <div class="card shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3">
@@ -20,24 +26,70 @@
 <div class="card shadow-sm">
     <div class="table-responsive">
         <table class="table align-middle mb-0">
-            <thead><tr><th>Request</th><th>Student</th><th>Submitted by</th><th>Status</th><th>Preferred date</th><th></th></tr></thead>
+            <thead><tr><th>Request</th><th>Student</th><th>Submitted by</th><th>Status</th><th>Files</th><th>Email</th><th>Preferred date</th><th></th></tr></thead>
             <tbody>
                 {% for item in requests %}
                     <tr>
                         <td>{{ item.get_request_type_display }}<div class="small text-muted">{{ item.title }}</div></td>
                         <td>{% if item.student %}<a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>{% else %}Unmatched{% endif %}</td>
                         <td>{{ item.submitted_by_name }}<div class="small text-muted">{{ item.submitted_by_email }}</div></td>
-                        <td>{{ item.get_status_display }}</td>
+                        <td>
+                            <span class="badge {% if item.status == 'new' %}text-bg-warning{% elif item.status == 'approved' %}text-bg-success{% elif item.status == 'declined' %}text-bg-danger{% elif item.status == 'completed' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
+                                {{ item.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ item.attachments.count }}</td>
+                        <td>
+                            {% if item.responses.last %}
+                                {% with latest_response=item.responses.last %}
+                                    {% if latest_response.sent_at %}
+                                        <span class="badge text-bg-success">Sent</span>
+                                    {% elif latest_response.send_requested_at %}
+                                        <span class="badge text-bg-warning">Queued</span>
+                                    {% else %}
+                                        <span class="badge text-bg-secondary">Draft</span>
+                                    {% endif %}
+                                {% endwith %}
+                            {% else %}
+                                <span class="text-muted small">None</span>
+                            {% endif %}
+                        </td>
                         <td>{{ item.preferred_date|default:"-" }}</td>
                         <td class="text-end">
-                            <a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Edit</a>
+                            <div class="d-flex justify-content-end gap-1 flex-wrap">
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Open</a>
+                                {% if item.request_type == 'counselling' and item.status != 'approved' and item.status != 'declined' and item.status != 'completed' %}
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="request_id" value="{{ item.pk }}">
+                                        <input type="hidden" name="action" value="approve">
+                                        <button class="btn btn-sm btn-outline-success" type="submit">Approve</button>
+                                    </form>
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="request_id" value="{{ item.pk }}">
+                                        <input type="hidden" name="action" value="decline">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Decline</button>
+                                    </form>
+                                {% endif %}
+                                {% if item.status != 'completed' %}
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="request_id" value="{{ item.pk }}">
+                                        <input type="hidden" name="action" value="complete">
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Complete</button>
+                                    </form>
+                                {% endif %}
+                            </div>
                             {% if item.request_type == 'counselling' %}
-                                <a class="btn btn-sm btn-primary" href="{% url 'session_create' %}?request={{ item.pk }}">Book slot</a>
+                                <div class="mt-1">
+                                    <a class="btn btn-sm btn-primary" href="{% url 'session_create' %}?request={{ item.pk }}">Book slot</a>
+                                </div>
                             {% endif %}
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="6" class="text-center text-muted py-5">No requests found.</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-5">No requests found.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="mb-4">
     <h1 class="h3 mb-1">Reports</h1>
-    <p class="text-muted mb-0">Management-ready summaries for weekly oversight and counsellor workload reviews.</p>
+    <p class="text-muted mb-0">Management-ready summaries plus a report workspace for parents and agents.</p>
 </div>
 <div class="row g-4 mb-4">
     <div class="col-lg-6">
@@ -77,6 +77,7 @@
         <div class="card shadow-sm h-100">
             <div class="card-header bg-white"><h2 class="h5 mb-0">Prepare parent or agent report</h2></div>
             <div class="card-body">
+                <p class="text-muted small">Use this for polished updates to parents, guardians, or agents. You can save a report draft first, then queue the email after review.</p>
                 <form method="post" enctype="multipart/form-data">
                     {% csrf_token %}
                     <div class="row g-3">
@@ -90,7 +91,7 @@
                     </div>
                     <div class="mt-3 d-flex gap-2">
                         <button class="btn btn-primary" type="submit">Save report</button>
-                        <button class="btn btn-outline-primary" type="submit" name="send_report" value="1">Save and email report</button>
+                        <button class="btn btn-outline-primary" type="submit" name="send_report" value="1">Save and queue email</button>
                     </div>
                 </form>
             </div>
@@ -104,7 +105,17 @@
                     <div class="list-group-item">
                         <div class="fw-semibold">{{ item.title }}</div>
                         <div><a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>{% if item.term %} | {{ item.term }}{% endif %}</div>
-                        <div class="small text-muted">{{ item.get_audience_display }}{% if item.recipient_email %} | {{ item.recipient_email }}{% endif %}</div>
+                        <div class="small text-muted">
+                            {{ item.get_audience_display }}{% if item.recipient_email %} | {{ item.recipient_email }}{% endif %}
+                            {% if item.sent_at %}
+                                | Sent {{ item.sent_at|date:"M j, Y g:i A" }}
+                            {% elif item.send_requested_at %}
+                                | Queued {{ item.send_requested_at|date:"M j, Y g:i A" }}
+                            {% endif %}
+                        </div>
+                        {% if item.send_error %}
+                            <div class="small text-danger mt-1">{{ item.send_error }}</div>
+                        {% endif %}
                         {% if item.attachment %}
                             <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{{ item.attachment.url }}" target="_blank">Open attached file</a></div>
                         {% endif %}

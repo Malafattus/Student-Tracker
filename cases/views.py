@@ -498,10 +498,39 @@ class StudentRequestListView(LoginRequiredMixin, ListView):
             queryset = queryset.filter(request_type=self.request.GET["request_type"])
         return queryset.order_by("status", "-created_at")
 
+    def post(self, request, *args, **kwargs):
+        if not (is_admin(request.user) or is_counsellor(request.user)):
+            messages.error(request, "You do not have permission to update requests.")
+            return redirect("request_list")
+        request_item = get_object_or_404(StudentRequest, pk=request.POST.get("request_id"))
+        action = request.POST.get("action")
+        if action == "approve":
+            request_item.status = StudentRequest.STATUS_APPROVED
+            request_item.save(update_fields=["status", "updated_at"])
+            log_audit(request.user, "updated", request_item, {"section": "request_approved_quick"})
+            messages.success(request, "Request approved.")
+        elif action == "decline":
+            request_item.status = StudentRequest.STATUS_DECLINED
+            request_item.save(update_fields=["status", "updated_at"])
+            log_audit(request.user, "updated", request_item, {"section": "request_declined_quick"})
+            messages.success(request, "Request declined.")
+        elif action == "complete":
+            request_item.status = StudentRequest.STATUS_COMPLETED
+            request_item.save(update_fields=["status", "updated_at"])
+            log_audit(request.user, "updated", request_item, {"section": "request_completed_quick"})
+            messages.success(request, "Request marked completed.")
+        return redirect("request_list")
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["status_choices"] = StudentRequest.STATUS_CHOICES
         context["type_choices"] = StudentRequest.REQUEST_TYPE_CHOICES
+        context["request_status_summary"] = {
+            "new": StudentRequest.objects.filter(status=StudentRequest.STATUS_NEW).count(),
+            "in_review": StudentRequest.objects.filter(status=StudentRequest.STATUS_IN_REVIEW).count(),
+            "approved": StudentRequest.objects.filter(status=StudentRequest.STATUS_APPROVED).count(),
+            "completed": StudentRequest.objects.filter(status=StudentRequest.STATUS_COMPLETED).count(),
+        }
         return context
 
 

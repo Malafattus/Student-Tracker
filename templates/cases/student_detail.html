@@ -305,7 +305,7 @@
                         {{ report_form.as_p }}
                         <div class="d-flex gap-2">
                             <button class="btn btn-primary" type="submit">Save report</button>
-                            <button class="btn btn-outline-primary" type="submit" name="send_report" value="1">Save and email</button>
+                            <button class="btn btn-outline-primary" type="submit" name="send_report" value="1">Save and queue email</button>
                         </div>
                     </form>
                 </div></div>
@@ -316,7 +316,17 @@
                 {% for report in student.prepared_reports.all %}
                     <div class="list-group-item">
                         <div class="fw-semibold">{{ report.title }}</div>
-                        <div class="small text-muted mb-2">{{ report.get_audience_display }}{% if report.term %} | {{ report.term }}{% endif %}{% if report.recipient_email %} | {{ report.recipient_email }}{% endif %}</div>
+                        <div class="small text-muted mb-2">
+                            {{ report.get_audience_display }}{% if report.term %} | {{ report.term }}{% endif %}{% if report.recipient_email %} | {{ report.recipient_email }}{% endif %}
+                            {% if report.sent_at %}
+                                | Sent {{ report.sent_at|date:"M j, Y g:i A" }}
+                            {% elif report.send_requested_at %}
+                                | Queued {{ report.send_requested_at|date:"M j, Y g:i A" }}
+                            {% endif %}
+                        </div>
+                        {% if report.send_error %}
+                            <div class="small text-danger mb-2">{{ report.send_error }}</div>
+                        {% endif %}
                         <div>{{ report.summary|default:"No summary entered." }}</div>
                         {% if report.attachment %}
                             <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{{ report.attachment.url }}" target="_blank">Open attached report file</a></div>

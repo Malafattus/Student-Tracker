@@ -69,6 +69,24 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Need transcript")
 
+    def test_counsellor_can_quick_approve_request_from_queue(self):
+        request_item = StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_COUNSELLING,
+            title="Need counselling",
+            details="Please book a support session.",
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.post(reverse("request_list"), {"request_id": request_item.pk, "action": "approve"})
+        self.assertRedirects(response, reverse("request_list"))
+        request_item.refresh_from_db()
+        self.assertEqual(request_item.status, StudentRequest.STATUS_APPROVED)
+
     def test_login_with_email_identifier(self):
         self.admin_user.email = "admin@example.com"
         self.admin_user.save()

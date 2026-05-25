@@ -14,17 +14,37 @@
             <div class="card-header bg-white"><h2 class="h5 mb-0">My Requests</h2></div>
             <div class="table-responsive">
                 <table class="table mb-0">
-                    <thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Submitted</th></tr></thead>
+                    <thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Files</th><th>Email Updates</th><th>Submitted</th></tr></thead>
                     <tbody>
                         {% for item in requests %}
                             <tr>
                                 <td>{{ item.get_request_type_display }}</td>
                                 <td>{{ item.title }}</td>
-                                <td>{{ item.get_status_display }}</td>
+                                <td>
+                                    <span class="badge {% if item.status == 'new' %}text-bg-warning{% elif item.status == 'approved' %}text-bg-success{% elif item.status == 'declined' %}text-bg-danger{% elif item.status == 'completed' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
+                                        {{ item.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>{{ item.attachments.count }}</td>
+                                <td>
+                                    {% if item.responses.last %}
+                                        {% with latest_response=item.responses.last %}
+                                            {% if latest_response.sent_at %}
+                                                <span class="badge text-bg-success">Sent</span>
+                                            {% elif latest_response.send_requested_at %}
+                                                <span class="badge text-bg-warning">Queued</span>
+                                            {% else %}
+                                                <span class="badge text-bg-secondary">Saved</span>
+                                            {% endif %}
+                                        {% endwith %}
+                                    {% else %}
+                                        <span class="text-muted small">None yet</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ item.created_at|date:"M j, Y" }}</td>
                             </tr>
                         {% empty %}
-                            <tr><td colspan="4" class="text-center text-muted py-4">No requests yet.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted py-4">No requests yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
