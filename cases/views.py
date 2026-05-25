@@ -726,7 +726,7 @@ class DatabaseBackupDownloadView(LoginRequiredMixin, View):
         db_path = settings.BASE_DIR / "db.sqlite3"
         if not db_path.exists():
             raise Http404("Database file not found.")
-        return FileResponse(open(db_path, "rb"), as_attachment=True, filename=f"student-tracker-backup-{timezone.now():%Y%m%d-%H%M}.sqlite3")
+        return FileResponse(open(db_path, "rb"), as_attachment=True, filename=f"uis-student-record-system-backup-{timezone.now():%Y%m%d-%H%M}.sqlite3")
 
 
 class CsvExportDownloadView(LoginRequiredMixin, View):
@@ -740,7 +740,7 @@ class CsvExportDownloadView(LoginRequiredMixin, View):
             self._write_tasks_csv(archive)
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type="application/zip")
-        response["Content-Disposition"] = f'attachment; filename="student-tracker-exports-{timezone.now():%Y%m%d-%H%M}.zip"'
+        response["Content-Disposition"] = f'attachment; filename="uis-student-record-system-exports-{timezone.now():%Y%m%d-%H%M}.zip"'
         return response
 
     def _write_students_csv(self, archive):

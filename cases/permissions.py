@@ -15,7 +15,11 @@ def ensure_roles():
 
 
 def user_has_role(user, role_name):
-    return user.is_authenticated and (user.is_superuser or user.groups.filter(name=role_name).exists())
+    if not user.is_authenticated:
+        return False
+    if role_name == ROLE_ADMIN:
+        return user.is_superuser or user.groups.filter(name=role_name).exists()
+    return user.groups.filter(name=role_name).exists()
 
 
 def is_admin(user):

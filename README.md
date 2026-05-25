@@ -1,6 +1,6 @@
-# Student Case Tracker
+# UIS Student Record System
 
-Student Case Tracker is a Django web app for an international high school counselling and recruitment team. It uses form-based data entry, role-based access, and a deployment-friendly structure that starts with SQLite for local development while staying ready to move to PostgreSQL later through standard Django ORM patterns.
+UIS Student Record System is a Django web app for an international high school counselling and recruitment team. It uses form-based data entry, role-based access, and a deployment-friendly structure that starts with SQLite for local development while staying ready to move to PostgreSQL later through standard Django ORM patterns.
 
 ## What is included
 
