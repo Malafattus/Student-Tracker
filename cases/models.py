@@ -463,7 +463,9 @@ class StudentRequestResponse(TimeStampedModel):
     recipient_email = models.EmailField()
     attachment = models.FileField(upload_to=request_response_upload_to, blank=True)
     mark_complete = models.BooleanField(default=True)
+    send_requested_at = models.DateTimeField(blank=True, null=True)
     sent_at = models.DateTimeField(blank=True, null=True)
+    send_error = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -493,7 +495,9 @@ class PreparedReport(TimeStampedModel):
     counselling_update = models.TextField(blank=True)
     recommendations = models.TextField(blank=True)
     attachment = models.FileField(upload_to=prepared_report_upload_to, blank=True)
+    send_requested_at = models.DateTimeField(blank=True, null=True)
     sent_at = models.DateTimeField(blank=True, null=True)
+    send_error = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-created_at"]

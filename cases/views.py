@@ -561,13 +561,13 @@ class StudentRequestUpdateView(LoginRequiredMixin, UpdateView):
             response_item = form.save(commit=False)
             response_item.request = self.object
             response_item.sent_by = request.user
+            response_item.send_requested_at = timezone.now()
             response_item.save()
-            send_request_response(response_item)
             if response_item.mark_complete and self.object.status != StudentRequest.STATUS_COMPLETED:
                 self.object.status = StudentRequest.STATUS_COMPLETED
                 self.object.save(update_fields=["status", "updated_at"])
             log_audit(request.user, "created", response_item, {"section": "request_response"})
-            messages.success(request, "Response email sent.")
+            messages.success(request, "Response saved and queued for email delivery.")
             return redirect("request_update", pk=self.object.pk)
         messages.error(request, "Please correct the response form.")
         return self.render_to_response(self.get_context_data(response_form=form))
@@ -837,10 +837,11 @@ class ReportsView(LoginRequiredMixin, TemplateView):
         if form.is_valid():
             report = form.save(commit=False)
             report.prepared_by = request.user
+            if "send_report" in request.POST and report.recipient_email:
+                report.send_requested_at = timezone.now()
             report.save()
             if "send_report" in request.POST and report.recipient_email:
-                send_prepared_report(report)
-                messages.success(request, "Report saved and emailed.")
+                messages.success(request, "Report saved and queued for email delivery.")
             else:
                 messages.success(request, "Report saved.")
             log_audit(request.user, "created", report, {"section": "prepared_report"})
@@ -922,10 +923,11 @@ class AddPreparedReportView(LoginRequiredMixin, View):
             report = form.save(commit=False)
             report.student = student
             report.prepared_by = request.user
+            if "send_report" in request.POST and report.recipient_email:
+                report.send_requested_at = timezone.now()
             report.save()
             if "send_report" in request.POST and report.recipient_email:
-                send_prepared_report(report)
-                messages.success(request, "Report saved and emailed.")
+                messages.success(request, "Report saved and queued for email delivery.")
             else:
                 messages.success(request, "Report saved.")
             log_audit(request.user, "created", report, {"section": "prepared_report", "student_id": student.pk})

@@ -121,7 +121,11 @@ def send_request_response(request_response):
     )
     if sent:
         request_response.sent_at = timezone.now()
-        request_response.save(update_fields=["sent_at", "updated_at"])
+        request_response.send_error = ""
+        request_response.save(update_fields=["sent_at", "send_error", "updated_at"])
+    else:
+        request_response.send_error = "Email delivery did not complete."
+        request_response.save(update_fields=["send_error", "updated_at"])
     return sent
 
 
@@ -138,7 +142,11 @@ def send_prepared_report(report):
     )
     if sent:
         report.sent_at = timezone.now()
-        report.save(update_fields=["sent_at", "updated_at"])
+        report.send_error = ""
+        report.save(update_fields=["sent_at", "send_error", "updated_at"])
+    else:
+        report.send_error = "Email delivery did not complete."
+        report.save(update_fields=["send_error", "updated_at"])
     return sent
 
 

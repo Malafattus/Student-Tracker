@@ -34,6 +34,18 @@ class MultiFileInput(forms.ClearableFileInput):
     allow_multiple_selected = True
 
 
+class MultiFileField(forms.FileField):
+    widget = MultiFileInput
+
+    def clean(self, data, initial=None):
+        single_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            return [single_clean(item, initial) for item in data if item]
+        if not data:
+            return []
+        return [single_clean(data, initial)]
+
+
 class LoginIDAuthenticationForm(AuthenticationForm):
     username = forms.CharField(label="Login ID")
 
@@ -257,9 +269,8 @@ class StudentPortalAccessForm(forms.Form):
 
 
 class StudentRequestPublicForm(forms.ModelForm):
-    attachments = forms.FileField(
+    attachments = MultiFileField(
         required=False,
-        widget=MultiFileInput(),
         help_text="Optional: upload transcript samples, screenshots, or supporting documents.",
     )
 
