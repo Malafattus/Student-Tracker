@@ -113,6 +113,16 @@ class CaseTrackerSmokeTests(TestCase):
         response = client.get(reverse("dashboard"))
         self.assertRedirects(response, reverse("portal_dashboard"))
 
+    def test_student_group_without_portal_access_sees_setup_page(self):
+        student_user = User.objects.create_user("student4", email="student4@example.com", password="pass12345")
+        student_user.groups.add(Group.objects.get(name=ROLE_STUDENT))
+        client = Client()
+        client.login(username="student4", password="pass12345")
+        response = client.get(reverse("dashboard"))
+        self.assertRedirects(response, reverse("portal_unavailable"))
+        unavailable_response = client.get(reverse("portal_unavailable"))
+        self.assertContains(unavailable_response, "Student Portal Setup Needed")
+
     def test_student_can_submit_portal_request(self):
         portal_user = User.objects.create_user("student3", email="student3@example.com", password="pass12345")
         portal_user.groups.add(Group.objects.get(name=ROLE_STUDENT))

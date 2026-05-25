@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Portal Setup Needed | UIS Student Record System{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h3 mb-3">Student Portal Setup Needed</h1>
+                <p class="text-muted">This account has been marked as a student account, but it is not yet linked to a student profile.</p>
+                <p class="mb-4">Please ask the school team to open your student profile and use <strong>Portal Access</strong> to connect your login properly. Once that is done, you will automatically see your own portal, requests, sessions, and term history here.</p>
+                <a class="btn btn-outline-primary" href="{% url 'logout' %}" onclick="event.preventDefault(); this.nextElementSibling.submit();">Log out</a>
+                <form method="post" action="{% url 'logout' %}" class="d-none">
+                    {% csrf_token %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

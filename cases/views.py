@@ -65,19 +65,27 @@ from .notifications import (
     send_session_confirmation,
     send_session_reminder,
 )
-from .permissions import can_edit_student, can_view_student, is_admin, is_counsellor, is_student, require_admin
+from .permissions import (
+    can_edit_student,
+    can_view_student,
+    get_portal_student,
+    has_active_student_portal,
+    is_admin,
+    is_counsellor,
+    is_student,
+    require_admin,
+)
 
 
 def current_student_for_user(user):
-    if not user.is_authenticated or not is_student(user):
-        return None
-    portal_access = getattr(user, "student_portal", None)
-    return portal_access.student if portal_access and portal_access.is_active else None
+    return get_portal_student(user)
 
 
 def redirect_student_to_portal(request):
-    if current_student_for_user(request.user):
+    if has_active_student_portal(request.user):
         return redirect("portal_dashboard")
+    if is_student(request.user):
+        return redirect("portal_unavailable")
     return None
 
 
@@ -89,6 +97,8 @@ class RoleAwareLoginView(auth_views.LoginView):
         student = current_student_for_user(self.request.user)
         if student:
             return reverse("portal_dashboard")
+        if is_student(self.request.user):
+            return reverse("portal_unavailable")
         return super().get_success_url()
 
 
@@ -217,6 +227,17 @@ class PortalDashboardView(LoginRequiredMixin, TemplateView):
         context["term_records"] = student.term_records.prefetch_related("courses", "term").all()
         context["missing_documents"] = student.documents.filter(status="missing")
         return context
+
+
+class PortalUnavailableView(LoginRequiredMixin, TemplateView):
+    template_name = "cases/portal_unavailable.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if has_active_student_portal(request.user):
+            return redirect("portal_dashboard")
+        if not is_student(request.user):
+            return redirect("dashboard")
+        return super().dispatch(request, *args, **kwargs)
 
 
 class StudentListView(LoginRequiredMixin, ListView):

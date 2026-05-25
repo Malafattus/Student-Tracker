@@ -38,6 +38,19 @@ def is_student(user):
     return user_has_role(user, ROLE_STUDENT)
 
 
+def get_portal_student(user):
+    if not is_student(user):
+        return None
+    portal_access = getattr(user, "student_portal", None)
+    if portal_access and portal_access.is_active:
+        return portal_access.student
+    return None
+
+
+def has_active_student_portal(user):
+    return get_portal_student(user) is not None
+
+
 def can_view_student(user, student):
     if not user.is_authenticated:
         return False

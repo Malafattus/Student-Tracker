@@ -14,6 +14,7 @@ from .views import (
     DatabaseBackupDownloadView,
     DashboardView,
     PortalDashboardView,
+    PortalUnavailableView,
     PortalRequestCreateView,
     PreparedReportUpdateView,
     ReportsView,
@@ -38,6 +39,7 @@ from .views import (
 urlpatterns = [
     path("", DashboardView.as_view(), name="dashboard"),
     path("portal/", PortalDashboardView.as_view(), name="portal_dashboard"),
+    path("portal/setup-needed/", PortalUnavailableView.as_view(), name="portal_unavailable"),
     path("portal/requests/new/", PortalRequestCreateView.as_view(), name="portal_request_create"),
     path("request-support/", StudentRequestPublicCreateView.as_view(), name="student_request_public"),
     path("request-support/thanks/", StudentRequestSuccessView.as_view(), name="student_request_success"),
