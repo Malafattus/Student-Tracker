@@ -1,7 +1,8 @@
+import calendar
 import csv
 import io
 import zipfile
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.contrib import messages
@@ -19,33 +20,46 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 from .audit import log_audit
 from .forms import (
+    PreparedReportForm,
     CounsellingSessionForm,
     CommunicationLogForm,
     DocumentRequirementForm,
     FollowUpTaskForm,
     LoginIDAuthenticationForm,
+    RequestTaskForm,
     SessionChangeRequestForm,
     StudentRequestPublicForm,
+    StudentRequestResponseForm,
     StudentRequestStaffForm,
     StudentFilterForm,
     StudentForm,
     StudentNoteForm,
     StudentPortalAccessForm,
+    StudentTermRecordForm,
+    TermCourseEnrollmentForm,
     UserManagementForm,
 )
 from .models import (
+    AcademicTerm,
     AuditLog,
     CommunicationLog,
     CounsellingSession,
     DocumentRequirement,
     FollowUpTask,
+    PreparedReport,
     SessionChangeRequest,
     Student,
     StudentPortalAccess,
     StudentRequest,
+    StudentRequestAttachment,
+    StudentRequestResponse,
+    StudentTermRecord,
+    TermCourseEnrollment,
 )
 from .notifications import (
+    send_prepared_report,
     send_request_confirmation,
+    send_request_response,
     send_session_change_request_notice,
     send_session_confirmation,
     send_session_reminder,
@@ -83,6 +97,57 @@ def student_queryset_for_user(user):
         # restricted by can_edit_student to records assigned to them.
         return qs
     return qs.none()
+
+
+def assign_request_owner(request_item):
+    """Route requests toward the student's counsellor when possible."""
+
+    if request_item.assigned_to or not request_item.student or not request_item.student.assigned_counsellor:
+        return
+    request_item.assigned_to = request_item.student.assigned_counsellor
+
+
+def save_request_attachments(request_item, uploaded_files, uploaded_by=None):
+    for uploaded_file in uploaded_files:
+        if not uploaded_file:
+            continue
+        StudentRequestAttachment.objects.create(
+            request=request_item,
+            uploaded_by=uploaded_by,
+            original_name=uploaded_file.name,
+            file=uploaded_file,
+        )
+
+
+def month_bounds(year, month):
+    if month == 12:
+        return date(year, month, 1), date(year + 1, 1, 1)
+    return date(year, month, 1), date(year, month + 1, 1)
+
+
+def build_session_calendar(sessions, pending_requests, year, month):
+    cal = calendar.Calendar(firstweekday=6)
+    sessions_by_day = {}
+    for session in sessions:
+        sessions_by_day.setdefault(timezone.localtime(session.start_at).date(), []).append(session)
+    requests_by_day = {}
+    for request_item in pending_requests:
+        if request_item.preferred_date:
+            requests_by_day.setdefault(request_item.preferred_date, []).append(request_item)
+    weeks = []
+    for week in cal.monthdatescalendar(year, month):
+        days = []
+        for day in week:
+            days.append(
+                {
+                    "date": day,
+                    "in_month": day.month == month,
+                    "sessions": sessions_by_day.get(day, []),
+                    "requests": requests_by_day.get(day, []),
+                }
+            )
+        weeks.append(days)
+    return weeks
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
@@ -242,6 +307,21 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
                 "end_at": timezone.localtime(timezone.now() + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M"),
             }
         )
+        context["term_form"] = StudentTermRecordForm(student=self.object)
+        context["course_form"] = TermCourseEnrollmentForm()
+        context["report_form"] = PreparedReportForm(
+            student=self.object,
+            initial={
+                "student": self.object,
+                "title": f"{self.object.full_name} progress report",
+                "recipient_name": self.object.parent_guardian_name or self.object.agency,
+                "recipient_email": self.object.parent_guardian_email,
+                "summary": self.object.internal_summary,
+                "academic_progress": f"Academic status: {self.object.get_academic_status_display()}",
+                "attendance_update": self.object.attendance_concerns,
+                "counselling_update": f"Counselling status: {self.object.get_counselling_status_display()}",
+            },
+        )
         return context
 
 
@@ -387,7 +467,9 @@ class StudentRequestPublicCreateView(CreateView):
         if not matched_student and student_identifier:
             matched_student = Student.objects.filter(student_id__iexact=student_identifier).first()
         form.instance.student = matched_student
+        assign_request_owner(form.instance)
         response = super().form_valid(form)
+        save_request_attachments(self.object, self.request.FILES.getlist("attachments"), self.request.user if self.request.user.is_authenticated else None)
         send_request_confirmation(self.object)
         log_audit(self.request.user, "created", self.object, {"section": "public_request"})
         return response
@@ -407,8 +489,9 @@ class StudentRequestListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         queryset = StudentRequest.objects.select_related("student", "assigned_to")
-        if is_counsellor(self.request.user) and not is_admin(self.request.user):
-            queryset = queryset.filter(Q(assigned_to=self.request.user) | Q(student__assigned_counsellor=self.request.user))
+        if is_student(self.request.user):
+            student = current_student_for_user(self.request.user)
+            queryset = queryset.filter(student=student)
         if self.request.GET.get("status"):
             queryset = queryset.filter(status=self.request.GET["status"])
         if self.request.GET.get("request_type"):
@@ -433,6 +516,75 @@ class StudentRequestUpdateView(LoginRequiredMixin, UpdateView):
             messages.error(request, "You do not have permission to manage student requests.")
             return redirect("dashboard")
         return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["response_form"] = kwargs.get("response_form") or StudentRequestResponseForm(request_item=self.object)
+        context["task_form"] = kwargs.get("task_form") or RequestTaskForm(
+            initial={
+                "title": f"Follow up: {self.object.title}",
+                "description": self.object.details,
+                "assigned_to": self.object.assigned_to or getattr(self.object.student, "assigned_counsellor", None),
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if "send_response" in request.POST:
+            return self.handle_response(request)
+        if "create_task" in request.POST:
+            return self.handle_task(request)
+        if "approve_request" in request.POST:
+            self.object.status = StudentRequest.STATUS_APPROVED
+            self.object.save(update_fields=["status", "updated_at"])
+            log_audit(request.user, "updated", self.object, {"section": "request_approved"})
+            messages.success(request, "Request approved.")
+            return redirect("request_update", pk=self.object.pk)
+        if "decline_request" in request.POST:
+            self.object.status = StudentRequest.STATUS_DECLINED
+            self.object.save(update_fields=["status", "updated_at"])
+            log_audit(request.user, "updated", self.object, {"section": "request_declined"})
+            messages.success(request, "Request declined.")
+            return redirect("request_update", pk=self.object.pk)
+        if "mark_completed" in request.POST:
+            self.object.status = StudentRequest.STATUS_COMPLETED
+            self.object.save(update_fields=["status", "updated_at"])
+            log_audit(request.user, "updated", self.object, {"section": "request_completed"})
+            messages.success(request, "Request marked completed.")
+            return redirect("request_update", pk=self.object.pk)
+        return super().post(request, *args, **kwargs)
+
+    def handle_response(self, request):
+        form = StudentRequestResponseForm(request.POST, request.FILES, request_item=self.object)
+        if form.is_valid():
+            response_item = form.save(commit=False)
+            response_item.request = self.object
+            response_item.sent_by = request.user
+            response_item.save()
+            send_request_response(response_item)
+            if response_item.mark_complete and self.object.status != StudentRequest.STATUS_COMPLETED:
+                self.object.status = StudentRequest.STATUS_COMPLETED
+                self.object.save(update_fields=["status", "updated_at"])
+            log_audit(request.user, "created", response_item, {"section": "request_response"})
+            messages.success(request, "Response email sent.")
+            return redirect("request_update", pk=self.object.pk)
+        messages.error(request, "Please correct the response form.")
+        return self.render_to_response(self.get_context_data(response_form=form))
+
+    def handle_task(self, request):
+        form = RequestTaskForm(request.POST)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.student = self.object.student
+            task.created_by = request.user
+            task.status = FollowUpTask.STATUS_OPEN
+            task.save()
+            log_audit(request.user, "created", task, {"section": "request_task", "request_id": self.object.pk})
+            messages.success(request, "Follow-up task created.")
+            return redirect("request_update", pk=self.object.pk)
+        messages.error(request, "Please correct the task form.")
+        return self.render_to_response(self.get_context_data(task_form=form))
 
     def form_valid(self, form):
         response = super().form_valid(form)
@@ -468,7 +620,9 @@ class PortalRequestCreateView(LoginRequiredMixin, CreateView):
         student = current_student_for_user(self.request.user)
         form.instance.student = student
         form.instance.student_identifier = student.student_id
+        assign_request_owner(form.instance)
         response = super().form_valid(form)
+        save_request_attachments(self.object, self.request.FILES.getlist("attachments"), self.request.user)
         send_request_confirmation(self.object)
         log_audit(self.request.user, "created", self.object, {"section": "portal_request"})
         messages.success(self.request, "Your request has been submitted.")
@@ -488,6 +642,7 @@ class AddStudentRequestView(LoginRequiredMixin, View):
             item.submitted_by_name = student.full_name
             item.submitted_by_email = student.parent_guardian_email or request.user.email or settings.DEFAULT_FROM_EMAIL
             item.student_identifier = student.student_id
+            assign_request_owner(item)
             item.save()
             log_audit(request.user, "created", item, {"section": "request", "student_id": student.pk})
             messages.success(request, "Student request logged.")
@@ -523,6 +678,29 @@ class SessionListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["status_choices"] = CounsellingSession.STATUS_CHOICES
         context["type_choices"] = CounsellingSession.SESSION_TYPE_CHOICES
+        today = timezone.localdate()
+        month = int(self.request.GET.get("month", today.month))
+        year = int(self.request.GET.get("year", today.year))
+        month_start, month_end = month_bounds(year, month)
+        month_sessions = CounsellingSession.objects.select_related("student", "counsellor").filter(
+            student__in=student_queryset_for_user(self.request.user),
+            start_at__date__gte=month_start,
+            start_at__date__lt=month_end,
+        )
+        pending_requests = StudentRequest.objects.filter(
+            student__in=student_queryset_for_user(self.request.user),
+            request_type=StudentRequest.REQUEST_COUNSELLING,
+            status__in=[
+                StudentRequest.STATUS_NEW,
+                StudentRequest.STATUS_IN_REVIEW,
+                StudentRequest.STATUS_APPROVED,
+            ],
+        )
+        context["calendar_weeks"] = build_session_calendar(month_sessions, pending_requests, year, month)
+        context["calendar_month"] = date(year, month, 1)
+        context["prev_month"] = (year - 1, 12) if month == 1 else (year, month - 1)
+        context["next_month"] = (year + 1, 1) if month == 12 else (year, month + 1)
+        context["pending_counselling_requests"] = pending_requests.order_by("preferred_date", "-created_at")[:12]
         return context
 
 
@@ -603,6 +781,7 @@ class SessionCreateView(LoginRequiredMixin, CreateView):
                         "student": linked_request.student,
                         "counsellor": linked_request.assigned_to or getattr(linked_request.student, "assigned_counsellor", None),
                         "confirmation_email": linked_request.submitted_by_email,
+                        "status": CounsellingSession.STATUS_SCHEDULED if linked_request.status == StudentRequest.STATUS_APPROVED else CounsellingSession.STATUS_PENDING_APPROVAL,
                     }
                 )
         initial.setdefault("start_at", timezone.localtime().strftime("%Y-%m-%dT%H:%M"))
@@ -650,6 +829,25 @@ class StudentPortalAccessUpdateView(LoginRequiredMixin, View):
 class ReportsView(LoginRequiredMixin, TemplateView):
     template_name = "cases/reports.html"
 
+    def post(self, request, *args, **kwargs):
+        if not (is_admin(request.user) or is_counsellor(request.user)):
+            messages.error(request, "You do not have permission to prepare reports.")
+            return redirect("reports")
+        form = PreparedReportForm(request.POST, request.FILES)
+        if form.is_valid():
+            report = form.save(commit=False)
+            report.prepared_by = request.user
+            report.save()
+            if "send_report" in request.POST and report.recipient_email:
+                send_prepared_report(report)
+                messages.success(request, "Report saved and emailed.")
+            else:
+                messages.success(request, "Report saved.")
+            log_audit(request.user, "created", report, {"section": "prepared_report"})
+            return redirect("reports")
+        context = self.get_context_data(report_form=form)
+        return self.render_to_response(context)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         today = timezone.localdate()
@@ -671,7 +869,69 @@ class ReportsView(LoginRequiredMixin, TemplateView):
         context["overdue_tasks"] = tasks.filter(
             due_date__lt=today, status__in=[FollowUpTask.STATUS_OPEN, FollowUpTask.STATUS_IN_PROGRESS]
         ).order_by("due_date")[:20]
+        context["report_form"] = kwargs.get("report_form") or PreparedReportForm()
+        context["prepared_reports"] = PreparedReport.objects.select_related("student", "term", "prepared_by")[:12]
         return context
+
+
+class AddStudentTermRecordView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        student = get_object_or_404(student_queryset_for_user(request.user), pk=pk)
+        if not can_edit_student(request.user, student):
+            messages.error(request, "You do not have permission to manage term history for this student.")
+            return redirect(f"{student.get_absolute_url()}?tab=terms")
+        form = StudentTermRecordForm(request.POST, student=student)
+        if form.is_valid():
+            term_record = form.save(commit=False)
+            term_record.student = student
+            term_record.save()
+            log_audit(request.user, "created", term_record, {"section": "term_record", "student_id": student.pk})
+            messages.success(request, "Term record added.")
+        else:
+            messages.error(request, "Please correct the term form and try again.")
+        return redirect(f"{student.get_absolute_url()}?tab=terms")
+
+
+class AddTermCourseView(LoginRequiredMixin, View):
+    def post(self, request, pk, term_record_id):
+        student = get_object_or_404(student_queryset_for_user(request.user), pk=pk)
+        term_record = get_object_or_404(StudentTermRecord, pk=term_record_id, student=student)
+        if not can_edit_student(request.user, student):
+            messages.error(request, "You do not have permission to add courses for this student.")
+            return redirect(f"{student.get_absolute_url()}?tab=terms")
+        form = TermCourseEnrollmentForm(request.POST)
+        if form.is_valid():
+            course = form.save(commit=False)
+            course.term_record = term_record
+            course.save()
+            log_audit(request.user, "created", course, {"section": "term_course", "student_id": student.pk})
+            messages.success(request, "Course added to term history.")
+        else:
+            messages.error(request, "Please correct the course form and try again.")
+        return redirect(f"{student.get_absolute_url()}?tab=terms")
+
+
+class AddPreparedReportView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        student = get_object_or_404(student_queryset_for_user(request.user), pk=pk)
+        if not can_edit_student(request.user, student):
+            messages.error(request, "You do not have permission to prepare reports for this student.")
+            return redirect(f"{student.get_absolute_url()}?tab=reports")
+        form = PreparedReportForm(request.POST, request.FILES, student=student)
+        if form.is_valid():
+            report = form.save(commit=False)
+            report.student = student
+            report.prepared_by = request.user
+            report.save()
+            if "send_report" in request.POST and report.recipient_email:
+                send_prepared_report(report)
+                messages.success(request, "Report saved and emailed.")
+            else:
+                messages.success(request, "Report saved.")
+            log_audit(request.user, "created", report, {"section": "prepared_report", "student_id": student.pk})
+        else:
+            messages.error(request, "Please correct the report form and try again.")
+        return redirect(f"{student.get_absolute_url()}?tab=reports")
 
 
 class UserManagementView(LoginRequiredMixin, View):

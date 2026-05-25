@@ -2,11 +2,14 @@ from django.urls import path
 
 from .views import (
     AdminToolsView,
+    AddPreparedReportView,
     AddStudentRequestView,
     AddStudentCommunicationView,
     AddStudentDocumentView,
     AddStudentNoteView,
     AddStudentTaskView,
+    AddStudentTermRecordView,
+    AddTermCourseView,
     CsvExportDownloadView,
     DatabaseBackupDownloadView,
     DashboardView,
@@ -45,6 +48,9 @@ urlpatterns = [
     path("students/<int:pk>/notes/add/", AddStudentNoteView.as_view(), name="student_note_add"),
     path("students/<int:pk>/tasks/add/", AddStudentTaskView.as_view(), name="student_task_add"),
     path("students/<int:pk>/requests/add/", AddStudentRequestView.as_view(), name="student_request_add"),
+    path("students/<int:pk>/terms/add/", AddStudentTermRecordView.as_view(), name="student_term_add"),
+    path("students/<int:pk>/terms/<int:term_record_id>/courses/add/", AddTermCourseView.as_view(), name="student_term_course_add"),
+    path("students/<int:pk>/reports/add/", AddPreparedReportView.as_view(), name="student_report_add"),
     path("students/<int:pk>/documents/add/", AddStudentDocumentView.as_view(), name="student_document_add"),
     path(
         "students/<int:pk>/communications/add/",

@@ -1,16 +1,22 @@
 from django.contrib import admin
 
 from .models import (
+    AcademicTerm,
     AuditLog,
     CommunicationLog,
     CounsellingSession,
     DocumentRequirement,
     FollowUpTask,
+    PreparedReport,
     SessionChangeRequest,
     Student,
     StudentNote,
     StudentPortalAccess,
     StudentRequest,
+    StudentRequestAttachment,
+    StudentRequestResponse,
+    StudentTermRecord,
+    TermCourseEnrollment,
 )
 
 
@@ -26,7 +32,13 @@ admin.site.register(FollowUpTask)
 admin.site.register(DocumentRequirement)
 admin.site.register(CommunicationLog)
 admin.site.register(AuditLog)
+admin.site.register(AcademicTerm)
 admin.site.register(StudentRequest)
+admin.site.register(StudentRequestAttachment)
+admin.site.register(StudentRequestResponse)
 admin.site.register(CounsellingSession)
 admin.site.register(SessionChangeRequest)
 admin.site.register(StudentPortalAccess)
+admin.site.register(StudentTermRecord)
+admin.site.register(TermCourseEnrollment)
+admin.site.register(PreparedReport)

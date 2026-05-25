@@ -17,6 +17,69 @@
         </form>
     </div>
 </div>
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h2 class="h5 mb-0">Calendar view</h2>
+        <div class="d-flex align-items-center gap-2">
+            <a class="btn btn-sm btn-outline-secondary" href="?year={{ prev_month.0 }}&month={{ prev_month.1 }}">Previous</a>
+            <span class="fw-semibold">{{ calendar_month|date:"F Y" }}</span>
+            <a class="btn btn-sm btn-outline-secondary" href="?year={{ next_month.0 }}&month={{ next_month.1 }}">Next</a>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-bordered align-top mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for week in calendar_weeks %}
+                    <tr>
+                        {% for day in week %}
+                            <td class="{% if not day.in_month %}bg-light text-muted{% endif %}" style="width:14%; min-width:150px; height:150px;">
+                                <div class="small fw-semibold mb-2">{{ day.date|date:"M j" }}</div>
+                                {% for request_item in day.requests %}
+                                    <div class="badge text-bg-warning text-wrap mb-1 d-block">Request: {{ request_item.student.full_name|default:request_item.submitted_by_name }}</div>
+                                {% endfor %}
+                                {% for session in day.sessions %}
+                                    <div class="small border rounded p-1 mb-1">
+                                        <div class="fw-semibold">{{ session.start_at|date:"g:i A" }}</div>
+                                        <div>{{ session.student.full_name }}</div>
+                                        <div class="text-muted">{{ session.get_status_display }}</div>
+                                    </div>
+                                {% endfor %}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white"><h2 class="h5 mb-0">Pending counselling requests</h2></div>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead><tr><th>Student</th><th>Requested date</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+                {% for item in pending_counselling_requests %}
+                    <tr>
+                        <td>{% if item.student %}<a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>{% else %}{{ item.submitted_by_name }}{% endif %}</td>
+                        <td>{{ item.preferred_date|default:"-" }}{% if item.preferred_time %}<div class="small text-muted">{{ item.preferred_time }}</div>{% endif %}</td>
+                        <td>{{ item.get_status_display }}</td>
+                        <td class="text-end">
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Review</a>
+                            <a class="btn btn-sm btn-primary" href="{% url 'session_create' %}?request={{ item.pk }}">Book slot</a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="text-center text-muted py-4">No pending counselling requests.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 <div class="card shadow-sm">
     <div class="table-responsive">
         <table class="table align-middle mb-0">

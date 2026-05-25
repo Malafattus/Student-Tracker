@@ -20,9 +20,111 @@
             </div>
             <div class="mt-4 d-flex gap-2">
                 <button class="btn btn-primary" type="submit">Save request</button>
+                {% if object.request_type == 'counselling' %}
+                    <button class="btn btn-outline-success" type="submit" name="approve_request" value="1">Approve request</button>
+                    <button class="btn btn-outline-danger" type="submit" name="decline_request" value="1">Decline request</button>
+                {% endif %}
+                <button class="btn btn-outline-secondary" type="submit" name="mark_completed" value="1">Mark completed</button>
                 <a class="btn btn-outline-secondary" href="{% url 'request_list' %}">Cancel</a>
             </div>
         </form>
+    </div>
+</div>
+<div class="row g-4 mt-1">
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Student attachments</h2></div>
+            <div class="card-body">
+                {% if object.attachments.all %}
+                    <ul class="list-group list-group-flush">
+                        {% for item in object.attachments.all %}
+                            <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-semibold">{{ item.original_name }}</div>
+                                    <div class="small text-muted">{{ item.created_at|date:"M j, Y g:i A" }}</div>
+                                </div>
+                                <a class="btn btn-sm btn-outline-primary" href="{{ item.file.url }}" target="_blank">Open</a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted mb-0">No student attachments were uploaded for this request.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Send response</h2></div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        {% for field in response_form %}
+                            <div class="{% if field.name == 'message' %}col-12{% else %}col-md-6{% endif %}">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-primary" type="submit" name="send_response" value="1">Email response</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row g-4 mt-1">
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Responses sent</h2></div>
+            <div class="card-body">
+                {% if object.responses.all %}
+                    <div class="list-group list-group-flush">
+                        {% for item in object.responses.all %}
+                            <div class="list-group-item px-0">
+                                <div class="fw-semibold">{{ item.subject }}</div>
+                                <div class="small text-muted mb-2">{{ item.recipient_email }} | {{ item.sent_at|default:item.created_at|date:"M j, Y g:i A" }}</div>
+                                <div class="mb-2">{{ item.message|linebreaksbr }}</div>
+                                {% if item.attachment %}
+                                    <a class="btn btn-sm btn-outline-primary" href="{{ item.attachment.url }}" target="_blank">Open attached document</a>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">No responses have been sent yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Create follow-up task</h2></div>
+            <div class="card-body">
+                {% if object.student %}
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="row g-3">
+                            {% for field in task_form %}
+                                <div class="{% if field.name == 'description' %}col-12{% else %}col-md-6{% endif %}">
+                                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="mt-3">
+                            <button class="btn btn-outline-primary" type="submit" name="create_task" value="1">Create task</button>
+                        </div>
+                    </form>
+                {% else %}
+                    <p class="text-muted mb-0">Attach this request to a student before creating a follow-up task.</p>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

@@ -48,6 +48,26 @@ class CaseTrackerSmokeTests(TestCase):
         )
         self.assertRedirects(response, reverse("student_request_success"))
         self.assertEqual(StudentRequest.objects.count(), 1)
+        request_item = StudentRequest.objects.get()
+        self.assertEqual(request_item.student, self.student)
+        self.assertEqual(request_item.assigned_to, self.counsellor)
+
+    def test_counsellor_can_see_public_student_requests_in_queue(self):
+        StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_TRANSCRIPT,
+            title="Need transcript",
+            details="Please help with an official transcript.",
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("request_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Need transcript")
 
     def test_login_with_email_identifier(self):
         self.admin_user.email = "admin@example.com"

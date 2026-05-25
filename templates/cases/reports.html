@@ -72,4 +72,48 @@
         </div>
     </div>
 </div>
+<div class="row g-4 mt-1">
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Prepare parent or agent report</h2></div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        {% for field in report_form %}
+                            <div class="{% if field.name == 'summary' or field.name == 'academic_progress' or field.name == 'attendance_update' or field.name == 'counselling_update' or field.name == 'recommendations' %}col-12{% else %}col-md-6{% endif %}">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-3 d-flex gap-2">
+                        <button class="btn btn-primary" type="submit">Save report</button>
+                        <button class="btn btn-outline-primary" type="submit" name="send_report" value="1">Save and email report</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Prepared reports</h2></div>
+            <div class="list-group list-group-flush">
+                {% for item in prepared_reports %}
+                    <div class="list-group-item">
+                        <div class="fw-semibold">{{ item.title }}</div>
+                        <div><a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>{% if item.term %} | {{ item.term }}{% endif %}</div>
+                        <div class="small text-muted">{{ item.get_audience_display }}{% if item.recipient_email %} | {{ item.recipient_email }}{% endif %}</div>
+                        {% if item.attachment %}
+                            <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{{ item.attachment.url }}" target="_blank">Open attached file</a></div>
+                        {% endif %}
+                    </div>
+                {% empty %}
+                    <div class="list-group-item text-muted">No prepared reports yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

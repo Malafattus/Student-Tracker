@@ -139,6 +139,65 @@ class Student(TimeStampedModel):
         return emails
 
 
+class AcademicTerm(TimeStampedModel):
+    school_year = models.CharField(max_length=20)
+    name = models.CharField(max_length=100)
+    display_order = models.PositiveIntegerField(default=1)
+    start_date = models.DateField(blank=True, null=True)
+    end_date = models.DateField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["school_year", "display_order"]
+        unique_together = ["school_year", "name"]
+
+    def __str__(self):
+        return f"{self.school_year} {self.name}"
+
+
+class StudentTermRecord(TimeStampedModel):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="term_records")
+    term = models.ForeignKey(AcademicTerm, on_delete=models.CASCADE, related_name="student_records")
+    academic_summary = models.TextField(blank=True)
+    attendance_summary = models.TextField(blank=True)
+    counselling_summary = models.TextField(blank=True)
+    agent_notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["term__school_year", "term__display_order"]
+        unique_together = ["student", "term"]
+
+    def __str__(self):
+        return f"{self.student.full_name} - {self.term}"
+
+
+class TermCourseEnrollment(TimeStampedModel):
+    term_record = models.ForeignKey(StudentTermRecord, on_delete=models.CASCADE, related_name="courses")
+    course_name = models.CharField(max_length=255)
+    course_code = models.CharField(max_length=50, blank=True)
+    teacher_name = models.CharField(max_length=255, blank=True)
+    current_mark = models.CharField(max_length=20, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["course_name"]
+
+    def __str__(self):
+        return self.course_name
+
+
+def request_attachment_upload_to(instance, filename):
+    return f"request_attachments/{instance.request_id}/{filename}"
+
+
+def request_response_upload_to(instance, filename):
+    return f"request_responses/{instance.request_id}/{filename}"
+
+
+def prepared_report_upload_to(instance, filename):
+    return f"prepared_reports/{instance.student_id}/{filename}"
+
+
 class StudentNote(TimeStampedModel):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="notes")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
@@ -244,6 +303,8 @@ class StudentRequest(TimeStampedModel):
 
     STATUS_NEW = "new"
     STATUS_IN_REVIEW = "in_review"
+    STATUS_APPROVED = "approved"
+    STATUS_DECLINED = "declined"
     STATUS_SCHEDULED = "scheduled"
     STATUS_COMPLETED = "completed"
     STATUS_CLOSED = "closed"
@@ -257,6 +318,8 @@ class StudentRequest(TimeStampedModel):
     STATUS_CHOICES = [
         (STATUS_NEW, "New"),
         (STATUS_IN_REVIEW, "In Review"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_DECLINED, "Declined"),
         (STATUS_SCHEDULED, "Scheduled"),
         (STATUS_COMPLETED, "Completed"),
         (STATUS_CLOSED, "Closed"),
@@ -296,6 +359,7 @@ class CounsellingSession(TimeStampedModel):
     TYPE_OTHER = "other"
 
     STATUS_SCHEDULED = "scheduled"
+    STATUS_PENDING_APPROVAL = "pending_approval"
     STATUS_COMPLETED = "completed"
     STATUS_CANCELLED = "cancelled"
     STATUS_NO_SHOW = "no_show"
@@ -307,6 +371,7 @@ class CounsellingSession(TimeStampedModel):
         (TYPE_OTHER, "Other"),
     ]
     STATUS_CHOICES = [
+        (STATUS_PENDING_APPROVAL, "Pending Approval"),
         (STATUS_SCHEDULED, "Scheduled"),
         (STATUS_COMPLETED, "Completed"),
         (STATUS_CANCELLED, "Cancelled"),
@@ -375,6 +440,66 @@ class SessionChangeRequest(TimeStampedModel):
 
     def __str__(self):
         return f"Reschedule request for {self.session}"
+
+
+class StudentRequestAttachment(TimeStampedModel):
+    request = models.ForeignKey(StudentRequest, on_delete=models.CASCADE, related_name="attachments")
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    original_name = models.CharField(max_length=255)
+    file = models.FileField(upload_to=request_attachment_upload_to)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.original_name
+
+
+class StudentRequestResponse(TimeStampedModel):
+    request = models.ForeignKey(StudentRequest, on_delete=models.CASCADE, related_name="responses")
+    sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    subject = models.CharField(max_length=255)
+    message = models.TextField()
+    recipient_email = models.EmailField()
+    attachment = models.FileField(upload_to=request_response_upload_to, blank=True)
+    mark_complete = models.BooleanField(default=True)
+    sent_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Response to {self.request}"
+
+
+class PreparedReport(TimeStampedModel):
+    AUDIENCE_PARENT = "parent"
+    AUDIENCE_AGENT = "agent"
+    AUDIENCE_CHOICES = [
+        (AUDIENCE_PARENT, "Parent/Guardian"),
+        (AUDIENCE_AGENT, "Agent/Agency"),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="prepared_reports")
+    term = models.ForeignKey(AcademicTerm, on_delete=models.SET_NULL, null=True, blank=True, related_name="reports")
+    prepared_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    audience = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default=AUDIENCE_PARENT)
+    title = models.CharField(max_length=255)
+    recipient_name = models.CharField(max_length=255, blank=True)
+    recipient_email = models.EmailField(blank=True)
+    summary = models.TextField(blank=True)
+    academic_progress = models.TextField(blank=True)
+    attendance_update = models.TextField(blank=True)
+    counselling_update = models.TextField(blank=True)
+    recommendations = models.TextField(blank=True)
+    attachment = models.FileField(upload_to=prepared_report_upload_to, blank=True)
+    sent_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
 
 
 class StudentPortalAccess(TimeStampedModel):

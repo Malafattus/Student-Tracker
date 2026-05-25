@@ -4,15 +4,20 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import Group, User
 
 from .models import (
+    AcademicTerm,
     CommunicationLog,
     CounsellingSession,
     DocumentRequirement,
     FollowUpTask,
+    PreparedReport,
     SessionChangeRequest,
     Student,
     StudentNote,
     StudentPortalAccess,
     StudentRequest,
+    StudentRequestResponse,
+    StudentTermRecord,
+    TermCourseEnrollment,
 )
 from .permissions import ROLE_NAMES, ensure_roles
 
@@ -23,6 +28,10 @@ class DateInput(forms.DateInput):
 
 class DateTimeInput(forms.DateTimeInput):
     input_type = "datetime-local"
+
+
+class MultiFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
 
 
 class LoginIDAuthenticationForm(AuthenticationForm):
@@ -248,6 +257,12 @@ class StudentPortalAccessForm(forms.Form):
 
 
 class StudentRequestPublicForm(forms.ModelForm):
+    attachments = forms.FileField(
+        required=False,
+        widget=MultiFileInput(),
+        help_text="Optional: upload transcript samples, screenshots, or supporting documents.",
+    )
+
     class Meta:
         model = StudentRequest
         fields = [
@@ -353,6 +368,114 @@ class SessionChangeRequestForm(forms.ModelForm):
             if cleaned["requested_end"] <= cleaned["requested_start"]:
                 self.add_error("requested_end", "End time must be after the start time.")
         return cleaned
+
+
+class StudentRequestResponseForm(forms.ModelForm):
+    class Meta:
+        model = StudentRequestResponse
+        fields = ["subject", "recipient_email", "message", "attachment", "mark_complete"]
+        widgets = {
+            "message": forms.Textarea(attrs={"rows": 6}),
+        }
+
+    def __init__(self, *args, request_item=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if request_item:
+            self.fields["subject"].initial = f"Update on your request: {request_item.title}"
+            self.fields["recipient_email"].initial = request_item.submitted_by_email
+            self.fields["message"].initial = (
+                f"Hello {request_item.submitted_by_name},\n\n"
+                f"We have reviewed your request: {request_item.title}.\n\n"
+                "Update:\n"
+            )
+        apply_bootstrap_classes(self)
+
+
+class RequestTaskForm(forms.ModelForm):
+    class Meta:
+        model = FollowUpTask
+        fields = ["title", "description", "assigned_to", "due_date", "priority"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "due_date": DateInput(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["assigned_to"].queryset = User.objects.filter(groups__name__in=["Admin", "Counsellor"]).distinct()
+        apply_bootstrap_classes(self)
+
+
+class StudentTermRecordForm(forms.ModelForm):
+    class Meta:
+        model = StudentTermRecord
+        fields = ["term", "academic_summary", "attendance_summary", "counselling_summary", "agent_notes"]
+        widgets = {
+            "academic_summary": forms.Textarea(attrs={"rows": 3}),
+            "attendance_summary": forms.Textarea(attrs={"rows": 3}),
+            "counselling_summary": forms.Textarea(attrs={"rows": 3}),
+            "agent_notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        student = kwargs.pop("student", None)
+        super().__init__(*args, **kwargs)
+        if student:
+            used_terms = student.term_records.values_list("term_id", flat=True)
+            if self.instance.pk:
+                self.fields["term"].queryset = AcademicTerm.objects.filter(is_active=True) | AcademicTerm.objects.filter(
+                    pk=self.instance.term_id
+                )
+            else:
+                self.fields["term"].queryset = AcademicTerm.objects.filter(is_active=True).exclude(pk__in=used_terms)
+        apply_bootstrap_classes(self)
+
+
+class TermCourseEnrollmentForm(forms.ModelForm):
+    class Meta:
+        model = TermCourseEnrollment
+        fields = ["course_name", "course_code", "teacher_name", "current_mark", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_bootstrap_classes(self)
+
+
+class PreparedReportForm(forms.ModelForm):
+    class Meta:
+        model = PreparedReport
+        fields = [
+            "student",
+            "term",
+            "audience",
+            "title",
+            "recipient_name",
+            "recipient_email",
+            "summary",
+            "academic_progress",
+            "attendance_update",
+            "counselling_update",
+            "recommendations",
+            "attachment",
+        ]
+        widgets = {
+            "summary": forms.Textarea(attrs={"rows": 3}),
+            "academic_progress": forms.Textarea(attrs={"rows": 4}),
+            "attendance_update": forms.Textarea(attrs={"rows": 3}),
+            "counselling_update": forms.Textarea(attrs={"rows": 3}),
+            "recommendations": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        student = kwargs.pop("student", None)
+        super().__init__(*args, **kwargs)
+        self.fields["term"].queryset = AcademicTerm.objects.filter(is_active=True)
+        if student:
+            self.fields["student"].initial = student
+        apply_bootstrap_classes(self)
 
 
 def apply_bootstrap_classes(form):

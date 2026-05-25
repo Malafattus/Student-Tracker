@@ -13,7 +13,7 @@ def build_absolute_url(path):
     return f"{base}{path}"
 
 
-def send_notification_email(subject, template_prefix, recipients, context):
+def send_notification_email(subject, template_prefix, recipients, context, attachments=None):
     recipients = [email for email in recipients if email]
     if not recipients:
         return False
@@ -25,6 +25,12 @@ def send_notification_email(subject, template_prefix, recipients, context):
         settings.DEFAULT_FROM_EMAIL,
         recipients,
     )
+    for attachment in attachments or []:
+        if not attachment:
+            continue
+        attachment.open("rb")
+        email.attach(attachment.name.rsplit("/", 1)[-1], attachment.read())
+        attachment.close()
     email.attach_alternative(html_body, "text/html")
     email.send(fail_silently=True)
     return True
@@ -98,6 +104,40 @@ def send_session_change_request_notice(change_request):
             "session": session,
         },
     )
+    return sent
+
+
+def send_request_response(request_response):
+    sent = send_notification_email(
+        request_response.subject,
+        "request_response",
+        [request_response.recipient_email],
+        {
+            "request_response": request_response,
+            "student_request": request_response.request,
+        },
+        attachments=[request_response.attachment] if request_response.attachment else None,
+    )
+    if sent:
+        request_response.sent_at = timezone.now()
+        request_response.save(update_fields=["sent_at", "updated_at"])
+    return sent
+
+
+def send_prepared_report(report):
+    sent = send_notification_email(
+        report.title,
+        "prepared_report",
+        [report.recipient_email],
+        {
+            "report": report,
+            "student": report.student,
+        },
+        attachments=[report.attachment] if report.attachment else None,
+    )
+    if sent:
+        report.sent_at = timezone.now()
+        report.save(update_fields=["sent_at", "updated_at"])
     return sent
 
 

@@ -1,0 +1,9 @@
+Hello {{ student_request.submitted_by_name }},
+
+Here is an update on your request:
+{{ student_request.title }}
+
+{{ request_response.message }}
+
+Best regards,
+UIS Student Record System

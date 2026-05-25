@@ -1,0 +1,8 @@
+Hello,
+
+Please find the latest report for {{ student.full_name }} attached if a document was included.
+
+{{ report.summary }}
+
+Best regards,
+UIS Student Record System
