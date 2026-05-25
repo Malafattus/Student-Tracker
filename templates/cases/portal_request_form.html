@@ -6,7 +6,7 @@
         <div class="card shadow-sm">
             <div class="card-body p-4">
                 <h1 class="h3 mb-2">Submit a New Request</h1>
-                <p class="text-muted">Use this form for transcript requests, counselling sessions, or other support needs.</p>
+                <p class="text-muted mb-4">Send a transcript request, counselling request, or another support request to the school team.</p>
                 <form method="post" enctype="multipart/form-data">
                     {% csrf_token %}
                     <div class="row g-3">
@@ -14,13 +14,14 @@
                             <div class="{% if field.name == 'details' or field.name == 'attachments' %}col-12{% else %}col-md-6{% endif %}">
                                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {{ field }}
+                                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                                 {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                             </div>
                         {% endfor %}
                     </div>
                     <div class="mt-4 d-flex gap-2">
                         <button class="btn btn-primary" type="submit">Send request</button>
-                        <a class="btn btn-outline-secondary" href="{% url 'portal_dashboard' %}">Cancel</a>
+                        <a class="btn btn-outline-secondary" href="{% url 'portal_dashboard' %}">Back to my portal</a>
                     </div>
                 </form>
             </div>

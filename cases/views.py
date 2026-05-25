@@ -28,6 +28,7 @@ from .forms import (
     LoginIDAuthenticationForm,
     RequestTaskForm,
     SessionChangeRequestForm,
+    StudentPortalRequestForm,
     StudentRequestPublicForm,
     StudentRequestResponseForm,
     StudentRequestStaffForm,
@@ -72,6 +73,12 @@ def current_student_for_user(user):
         return None
     portal_access = getattr(user, "student_portal", None)
     return portal_access.student if portal_access and portal_access.is_active else None
+
+
+def redirect_student_to_portal(request):
+    if current_student_for_user(request.user):
+        return redirect("portal_dashboard")
+    return None
 
 
 class RoleAwareLoginView(auth_views.LoginView):
@@ -153,6 +160,12 @@ def build_session_calendar(sessions, pending_requests, year, month):
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = "cases/dashboard.html"
 
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_student_to_portal(request)
+        if portal_redirect:
+            return portal_redirect
+        return super().dispatch(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         today = timezone.localdate()
@@ -199,8 +212,10 @@ class PortalDashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         student = current_student_for_user(self.request.user)
         context["student"] = student
-        context["requests"] = student.requests.order_by("-created_at")
+        context["requests"] = student.requests.prefetch_related("attachments", "responses").order_by("-created_at")
         context["sessions"] = student.sessions.order_by("start_at")
+        context["term_records"] = student.term_records.prefetch_related("courses", "term").all()
+        context["missing_documents"] = student.documents.filter(status="missing")
         return context
 
 
@@ -209,6 +224,12 @@ class StudentListView(LoginRequiredMixin, ListView):
     template_name = "cases/student_list.html"
     context_object_name = "students"
     paginate_by = 25
+
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_student_to_portal(request)
+        if portal_redirect:
+            return portal_redirect
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         queryset = student_queryset_for_user(self.request.user).annotate(
@@ -282,6 +303,12 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
     model = Student
     template_name = "cases/student_detail.html"
     context_object_name = "student"
+
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_student_to_portal(request)
+        if portal_redirect:
+            return portal_redirect
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         return student_queryset_for_user(self.request.user).prefetch_related(
@@ -410,6 +437,12 @@ class TaskListView(LoginRequiredMixin, ListView):
     context_object_name = "tasks"
     paginate_by = 30
 
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_student_to_portal(request)
+        if portal_redirect:
+            return portal_redirect
+        return super().dispatch(request, *args, **kwargs)
+
     def get_queryset(self):
         tasks = FollowUpTask.objects.select_related("student", "assigned_to", "created_by").filter(
             student__in=student_queryset_for_user(self.request.user)
@@ -486,6 +519,12 @@ class StudentRequestListView(LoginRequiredMixin, ListView):
     template_name = "cases/request_list.html"
     context_object_name = "requests"
     paginate_by = 30
+
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_student_to_portal(request)
+        if portal_redirect:
+            return portal_redirect
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         queryset = StudentRequest.objects.select_related("student", "assigned_to")
@@ -624,7 +663,7 @@ class StudentRequestUpdateView(LoginRequiredMixin, UpdateView):
 
 class PortalRequestCreateView(LoginRequiredMixin, CreateView):
     model = StudentRequest
-    form_class = StudentRequestPublicForm
+    form_class = StudentPortalRequestForm
     template_name = "cases/portal_request_form.html"
     success_url = reverse_lazy("portal_dashboard")
 
@@ -633,21 +672,11 @@ class PortalRequestCreateView(LoginRequiredMixin, CreateView):
             return redirect("dashboard")
         return super().dispatch(request, *args, **kwargs)
 
-    def get_initial(self):
-        initial = super().get_initial()
-        student = current_student_for_user(self.request.user)
-        initial.update(
-            {
-                "submitted_by_name": student.full_name,
-                "submitted_by_email": getattr(student.portal_access.user, "email", "") or student.parent_guardian_email,
-                "student_identifier": student.student_id,
-            }
-        )
-        return initial
-
     def form_valid(self, form):
         student = current_student_for_user(self.request.user)
         form.instance.student = student
+        form.instance.submitted_by_name = student.full_name
+        form.instance.submitted_by_email = getattr(student.portal_access.user, "email", "") or student.parent_guardian_email
         form.instance.student_identifier = student.student_id
         assign_request_owner(form.instance)
         response = super().form_valid(form)
@@ -684,6 +713,12 @@ class SessionListView(LoginRequiredMixin, ListView):
     template_name = "cases/session_list.html"
     context_object_name = "sessions"
     paginate_by = 40
+
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_student_to_portal(request)
+        if portal_redirect:
+            return portal_redirect
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         queryset = CounsellingSession.objects.select_related("student", "counsellor", "linked_request")
@@ -857,6 +892,12 @@ class StudentPortalAccessUpdateView(LoginRequiredMixin, View):
 
 class ReportsView(LoginRequiredMixin, TemplateView):
     template_name = "cases/reports.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_student_to_portal(request)
+        if portal_redirect:
+            return portal_redirect
+        return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
         if not (is_admin(request.user) or is_counsellor(request.user)):

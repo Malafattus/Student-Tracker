@@ -296,6 +296,31 @@ class StudentRequestPublicForm(forms.ModelForm):
         apply_bootstrap_classes(self)
 
 
+class StudentPortalRequestForm(forms.ModelForm):
+    attachments = MultiFileField(
+        required=False,
+        help_text="Optional: upload transcript samples, screenshots, or supporting documents.",
+    )
+
+    class Meta:
+        model = StudentRequest
+        fields = [
+            "request_type",
+            "title",
+            "details",
+            "preferred_date",
+            "preferred_time",
+        ]
+        widgets = {
+            "details": forms.Textarea(attrs={"rows": 5}),
+            "preferred_date": DateInput(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_bootstrap_classes(self)
+
+
 class StudentRequestStaffForm(forms.ModelForm):
     class Meta:
         model = StudentRequest

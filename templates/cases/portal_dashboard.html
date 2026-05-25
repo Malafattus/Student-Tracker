@@ -8,9 +8,72 @@
     </div>
     <a class="btn btn-primary" href="{% url 'portal_request_create' %}">Submit New Request</a>
 </div>
-<div class="row g-4">
+
+<div class="row g-4 mb-4">
     <div class="col-lg-6">
-        <div class="card shadow-sm">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">My Information</h2></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6"><strong>Preferred language:</strong><br>{{ student.preferred_language|default:"Not set" }}</div>
+                    <div class="col-md-6"><strong>Nationality:</strong><br>{{ student.nationality }}</div>
+                    <div class="col-md-6"><strong>Assigned counsellor:</strong><br>{{ student.assigned_counsellor.get_full_name|default:"Not assigned yet" }}</div>
+                    <div class="col-md-6"><strong>Agency:</strong><br>{{ student.agency|default:"Not set" }}</div>
+                    <div class="col-md-6"><strong>Academic status:</strong><br>{{ student.get_academic_status_display }}</div>
+                    <div class="col-md-6"><strong>Application status:</strong><br>{{ student.get_university_application_status_display }}</div>
+                    <div class="col-md-6"><strong>Payment status:</strong><br>{{ student.get_payment_status_display }}</div>
+                    <div class="col-md-6"><strong>Homestay status:</strong><br>{{ student.get_homestay_status_display }}</div>
+                </div>
+                {% if student.internal_summary %}
+                    <hr>
+                    <h3 class="h6">Current Summary</h3>
+                    <p class="mb-0">{{ student.internal_summary|linebreaksbr }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Important Checklist</h2></div>
+            <div class="card-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="small text-muted">Open requests</div>
+                            <div class="fs-3 fw-semibold">{{ requests|length }}</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="small text-muted">Booked sessions</div>
+                            <div class="fs-3 fw-semibold">{{ sessions|length }}</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="small text-muted">Missing documents</div>
+                            <div class="fs-3 fw-semibold">{{ missing_documents|length }}</div>
+                        </div>
+                    </div>
+                </div>
+                {% if missing_documents %}
+                    <h3 class="h6">Missing documents</h3>
+                    <ul class="mb-0">
+                        {% for document in missing_documents %}
+                            <li>{{ document.document_name }}{% if document.due_date %} (due {{ document.due_date }}){% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted mb-0">No missing documents are listed right now.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-7">
+        <div class="card shadow-sm mb-4">
             <div class="card-header bg-white"><h2 class="h5 mb-0">My Requests</h2></div>
             <div class="table-responsive">
                 <table class="table mb-0">
@@ -50,8 +113,49 @@
                 </table>
             </div>
         </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">My Term History</h2></div>
+            <div class="card-body">
+                {% for record in term_records %}
+                    <div class="border rounded p-3 mb-3">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                            <div>
+                                <h3 class="h6 mb-1">{{ record.term }}</h3>
+                                {% if record.term.start_date and record.term.end_date %}
+                                    <div class="small text-muted">{{ record.term.start_date }} to {{ record.term.end_date }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <p><strong>Academic:</strong> {{ record.academic_summary|default:"No academic summary yet." }}</p>
+                        <p><strong>Attendance:</strong> {{ record.attendance_summary|default:"No attendance update yet." }}</p>
+                        <p><strong>Counselling:</strong> {{ record.counselling_summary|default:"No counselling update yet." }}</p>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead><tr><th>Course</th><th>Code</th><th>Teacher</th><th>Mark</th></tr></thead>
+                                <tbody>
+                                    {% for course in record.courses.all %}
+                                        <tr>
+                                            <td>{{ course.course_name }}</td>
+                                            <td>{{ course.course_code|default:"-" }}</td>
+                                            <td>{{ course.teacher_name|default:"-" }}</td>
+                                            <td>{{ course.current_mark|default:"-" }}</td>
+                                        </tr>
+                                    {% empty %}
+                                        <tr><td colspan="4" class="text-center text-muted">No courses recorded yet.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="text-muted mb-0">No term history has been shared yet.</p>
+                {% endfor %}
+            </div>
+        </div>
     </div>
-    <div class="col-lg-6">
+
+    <div class="col-xl-5">
         <div class="card shadow-sm">
             <div class="card-header bg-white"><h2 class="h5 mb-0">My Sessions</h2></div>
             <div class="table-responsive">

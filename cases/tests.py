@@ -101,6 +101,38 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertRedirects(response, reverse("portal_dashboard"))
         portal_response = self.client.get(reverse("portal_dashboard"))
         self.assertEqual(portal_response.status_code, 200)
+        self.assertContains(portal_response, "My Student Portal")
+        self.assertNotContains(portal_response, "Recent audit activity")
+
+    def test_student_dashboard_route_redirects_into_portal(self):
+        portal_user = User.objects.create_user("student2", email="student2@example.com", password="pass12345")
+        portal_user.groups.add(Group.objects.get(name=ROLE_STUDENT))
+        StudentPortalAccess.objects.create(student=self.student, user=portal_user)
+        client = Client()
+        client.login(username="student2", password="pass12345")
+        response = client.get(reverse("dashboard"))
+        self.assertRedirects(response, reverse("portal_dashboard"))
+
+    def test_student_can_submit_portal_request(self):
+        portal_user = User.objects.create_user("student3", email="student3@example.com", password="pass12345")
+        portal_user.groups.add(Group.objects.get(name=ROLE_STUDENT))
+        StudentPortalAccess.objects.create(student=self.student, user=portal_user)
+        client = Client()
+        client.login(username="student3", password="pass12345")
+        response = client.post(
+            reverse("portal_request_create"),
+            {
+                "request_type": StudentRequest.REQUEST_TRANSCRIPT,
+                "title": "Need a transcript for university",
+                "details": "Please prepare it for my application.",
+                "preferred_time": "After school",
+            },
+        )
+        self.assertRedirects(response, reverse("portal_dashboard"))
+        request_item = StudentRequest.objects.get(title="Need a transcript for university")
+        self.assertEqual(request_item.student, self.student)
+        self.assertEqual(request_item.submitted_by_name, self.student.full_name)
+        self.assertEqual(request_item.student_identifier, self.student.student_id)
 
     def test_session_reschedule_request_form_creates_change_request(self):
         session = CounsellingSession.objects.create(
