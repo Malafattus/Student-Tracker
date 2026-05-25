@@ -1,6 +1,17 @@
 from django.contrib import admin
 
-from .models import AuditLog, CommunicationLog, DocumentRequirement, FollowUpTask, Student, StudentNote
+from .models import (
+    AuditLog,
+    CommunicationLog,
+    CounsellingSession,
+    DocumentRequirement,
+    FollowUpTask,
+    SessionChangeRequest,
+    Student,
+    StudentNote,
+    StudentPortalAccess,
+    StudentRequest,
+)
 
 
 @admin.register(Student)
@@ -15,3 +26,7 @@ admin.site.register(FollowUpTask)
 admin.site.register(DocumentRequirement)
 admin.site.register(CommunicationLog)
 admin.site.register(AuditLog)
+admin.site.register(StudentRequest)
+admin.site.register(CounsellingSession)
+admin.site.register(SessionChangeRequest)
+admin.site.register(StudentPortalAccess)
