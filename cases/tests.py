@@ -2,7 +2,7 @@ from django.contrib.auth.models import Group, User
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import CounsellingSession, SessionChangeRequest, Student, StudentPortalAccess, StudentRequest
+from .models import CounsellingSession, PreparedReport, SessionChangeRequest, Student, StudentPortalAccess, StudentRequest
 from .permissions import ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_STUDENT, ensure_roles
 
 
@@ -121,3 +121,27 @@ class CaseTrackerSmokeTests(TestCase):
         )
         self.assertRedirects(response, reverse("session_reschedule_success"))
         self.assertEqual(SessionChangeRequest.objects.count(), 1)
+
+    def test_prepared_report_save_redirects_to_saved_report_page(self):
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.post(
+            reverse("student_report_add", args=[self.student.pk]),
+            {
+                "student": self.student.pk,
+                "audience": PreparedReport.AUDIENCE_PARENT,
+                "title": "May family update",
+                "recipient_name": "Parent Contact",
+                "recipient_email": "parent@example.com",
+                "summary": "Summary text.",
+                "academic_progress": "Academic update.",
+                "attendance_update": "Attendance update.",
+                "counselling_update": "Counselling update.",
+                "recommendations": "Recommendations.",
+            },
+        )
+        report = PreparedReport.objects.get()
+        self.assertRedirects(response, reverse("prepared_report_update", args=[report.pk]))
+        detail_response = client.get(reverse("prepared_report_update", args=[report.pk]))
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "May family update")

@@ -64,7 +64,7 @@ from .notifications import (
     send_session_confirmation,
     send_session_reminder,
 )
-from .permissions import can_edit_student, is_admin, is_counsellor, is_student, require_admin
+from .permissions import can_edit_student, can_view_student, is_admin, is_counsellor, is_student, require_admin
 
 
 def current_student_for_user(user):
@@ -869,12 +869,13 @@ class ReportsView(LoginRequiredMixin, TemplateView):
             if "send_report" in request.POST and report.recipient_email:
                 report.send_requested_at = timezone.now()
             report.save()
+            success_url = reverse("prepared_report_update", args=[report.pk])
             if "send_report" in request.POST and report.recipient_email:
                 messages.success(request, "Report saved and queued for email delivery.")
             else:
                 messages.success(request, "Report saved.")
             log_audit(request.user, "created", report, {"section": "prepared_report"})
-            return redirect("reports")
+            return redirect(success_url)
         context = self.get_context_data(report_form=form)
         return self.render_to_response(context)
 
@@ -955,6 +956,7 @@ class AddPreparedReportView(LoginRequiredMixin, View):
             if "send_report" in request.POST and report.recipient_email:
                 report.send_requested_at = timezone.now()
             report.save()
+            success_url = reverse("prepared_report_update", args=[report.pk])
             if "send_report" in request.POST and report.recipient_email:
                 messages.success(request, "Report saved and queued for email delivery.")
             else:
@@ -962,7 +964,54 @@ class AddPreparedReportView(LoginRequiredMixin, View):
             log_audit(request.user, "created", report, {"section": "prepared_report", "student_id": student.pk})
         else:
             messages.error(request, "Please correct the report form and try again.")
-        return redirect(f"{student.get_absolute_url()}?tab=reports")
+            success_url = f"{student.get_absolute_url()}?tab=reports"
+        return redirect(success_url)
+
+
+class PreparedReportUpdateView(LoginRequiredMixin, UpdateView):
+    model = PreparedReport
+    form_class = PreparedReportForm
+    template_name = "cases/prepared_report_form.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if not can_view_student(request.user, self.object.student):
+            messages.error(request, "You do not have permission to access this report.")
+            return redirect("dashboard")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["student"] = self.object.student
+        return kwargs
+
+    def get_success_url(self):
+        return reverse("prepared_report_update", args=[self.object.pk])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["student"] = self.object.student
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if not can_edit_student(request.user, self.object.student):
+            messages.error(request, "You do not have permission to update this report.")
+            return redirect("prepared_report_update", pk=self.object.pk)
+        return super().post(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        if "send_report" in self.request.POST and form.cleaned_data.get("recipient_email"):
+            form.instance.send_requested_at = timezone.now()
+            form.instance.sent_at = None
+            form.instance.send_error = ""
+        response = super().form_valid(form)
+        log_audit(self.request.user, "updated", self.object, {"section": "prepared_report"})
+        if "send_report" in self.request.POST and self.object.recipient_email:
+            messages.success(self.request, "Report updated and queued for email delivery.")
+        else:
+            messages.success(self.request, "Report updated.")
+        return response
 
 
 class UserManagementView(LoginRequiredMixin, View):

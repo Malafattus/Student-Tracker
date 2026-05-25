@@ -315,14 +315,19 @@
             <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Prepared reports</h2></div><div class="list-group list-group-flush">
                 {% for report in student.prepared_reports.all %}
                     <div class="list-group-item">
-                        <div class="fw-semibold">{{ report.title }}</div>
-                        <div class="small text-muted mb-2">
-                            {{ report.get_audience_display }}{% if report.term %} | {{ report.term }}{% endif %}{% if report.recipient_email %} | {{ report.recipient_email }}{% endif %}
-                            {% if report.sent_at %}
-                                | Sent {{ report.sent_at|date:"M j, Y g:i A" }}
-                            {% elif report.send_requested_at %}
-                                | Queued {{ report.send_requested_at|date:"M j, Y g:i A" }}
-                            {% endif %}
+                        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                            <div>
+                                <div class="fw-semibold">{{ report.title }}</div>
+                                <div class="small text-muted mb-2">
+                                    {{ report.get_audience_display }}{% if report.term %} | {{ report.term }}{% endif %}{% if report.recipient_email %} | {{ report.recipient_email }}{% endif %}
+                                    {% if report.sent_at %}
+                                        | Sent {{ report.sent_at|date:"M j, Y g:i A" }}
+                                    {% elif report.send_requested_at %}
+                                        | Queued {{ report.send_requested_at|date:"M j, Y g:i A" }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_update' report.pk %}">Open report</a>
                         </div>
                         {% if report.send_error %}
                             <div class="small text-danger mb-2">{{ report.send_error }}</div>

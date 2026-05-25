@@ -15,6 +15,7 @@ from .views import (
     DashboardView,
     PortalDashboardView,
     PortalRequestCreateView,
+    PreparedReportUpdateView,
     ReportsView,
     SessionCreateView,
     SessionListView,
@@ -51,6 +52,7 @@ urlpatterns = [
     path("students/<int:pk>/terms/add/", AddStudentTermRecordView.as_view(), name="student_term_add"),
     path("students/<int:pk>/terms/<int:term_record_id>/courses/add/", AddTermCourseView.as_view(), name="student_term_course_add"),
     path("students/<int:pk>/reports/add/", AddPreparedReportView.as_view(), name="student_report_add"),
+    path("prepared-reports/<int:pk>/", PreparedReportUpdateView.as_view(), name="prepared_report_update"),
     path("students/<int:pk>/documents/add/", AddStudentDocumentView.as_view(), name="student_document_add"),
     path(
         "students/<int:pk>/communications/add/",

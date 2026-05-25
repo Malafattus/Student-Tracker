@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ object.title }} | UIS Student Record System{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">{{ object.title }}</h1>
+        <p class="text-muted mb-0">
+            {{ student.full_name }}{% if object.term %} | {{ object.term }}{% endif %} | {{ object.get_audience_display }}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{{ student.get_absolute_url }}?tab=reports">Back to student</a>
+        {% if object.attachment %}
+            <a class="btn btn-outline-primary" href="{{ object.attachment.url }}" target="_blank">Open attached file</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Report details</h2></div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        {% for field in form %}
+                            <div class="{% if field.name == 'summary' or field.name == 'academic_progress' or field.name == 'attendance_update' or field.name == 'counselling_update' or field.name == 'recommendations' %}col-12{% else %}col-md-6{% endif %}">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-4 d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save changes</button>
+                        <button class="btn btn-outline-primary" type="submit" name="send_report" value="1">Save and queue email</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Delivery status</h2></div>
+            <div class="card-body">
+                <p><strong>Recipient:</strong> {{ object.recipient_email|default:"Not set" }}</p>
+                <p><strong>Status:</strong>
+                    {% if object.sent_at %}
+                        <span class="badge text-bg-success">Sent</span>
+                    {% elif object.send_requested_at %}
+                        <span class="badge text-bg-warning">Queued</span>
+                    {% else %}
+                        <span class="badge text-bg-secondary">Saved only</span>
+                    {% endif %}
+                </p>
+                {% if object.send_requested_at %}<p><strong>Queued:</strong> {{ object.send_requested_at|date:"M j, Y g:i A" }}</p>{% endif %}
+                {% if object.sent_at %}<p><strong>Sent:</strong> {{ object.sent_at|date:"M j, Y g:i A" }}</p>{% endif %}
+                {% if object.send_error %}<p class="text-danger mb-0"><strong>Last error:</strong> {{ object.send_error }}</p>{% endif %}
+            </div>
+        </div>
+        <div class="card shadow-sm">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Report preview</h2></div>
+            <div class="card-body report-preview">
+                <h3>Student</h3>
+                <p><strong>{{ student.full_name }}</strong><br>Student ID: {{ student.student_id }}<br>Grade: {{ student.grade }}</p>
+                <h3>Summary</h3>
+                <p>{{ object.summary|default:"No summary provided."|linebreaksbr }}</p>
+                <h3>Academic Progress</h3>
+                <p>{{ object.academic_progress|default:"No academic progress update provided."|linebreaksbr }}</p>
+                <h3>Attendance Update</h3>
+                <p>{{ object.attendance_update|default:"No attendance update provided."|linebreaksbr }}</p>
+                <h3>Counselling Update</h3>
+                <p>{{ object.counselling_update|default:"No counselling update provided."|linebreaksbr }}</p>
+                <h3>Recommendations</h3>
+                <p>{{ object.recommendations|default:"No recommendations provided."|linebreaksbr }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

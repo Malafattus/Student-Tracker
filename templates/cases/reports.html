@@ -103,15 +103,22 @@
             <div class="list-group list-group-flush">
                 {% for item in prepared_reports %}
                     <div class="list-group-item">
-                        <div class="fw-semibold">{{ item.title }}</div>
-                        <div><a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>{% if item.term %} | {{ item.term }}{% endif %}</div>
-                        <div class="small text-muted">
-                            {{ item.get_audience_display }}{% if item.recipient_email %} | {{ item.recipient_email }}{% endif %}
-                            {% if item.sent_at %}
-                                | Sent {{ item.sent_at|date:"M j, Y g:i A" }}
-                            {% elif item.send_requested_at %}
-                                | Queued {{ item.send_requested_at|date:"M j, Y g:i A" }}
-                            {% endif %}
+                        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                            <div>
+                                <div class="fw-semibold">{{ item.title }}</div>
+                                <div><a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>{% if item.term %} | {{ item.term }}{% endif %}</div>
+                                <div class="small text-muted">
+                                    {{ item.get_audience_display }}{% if item.recipient_email %} | {{ item.recipient_email }}{% endif %}
+                                    {% if item.sent_at %}
+                                        | Sent {{ item.sent_at|date:"M j, Y g:i A" }}
+                                    {% elif item.send_requested_at %}
+                                        | Queued {{ item.send_requested_at|date:"M j, Y g:i A" }}
+                                    {% else %}
+                                        | Saved draft
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_update' item.pk %}">Open report</a>
                         </div>
                         {% if item.send_error %}
                             <div class="small text-danger mt-1">{{ item.send_error }}</div>
