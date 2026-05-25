@@ -1,4 +1,27 @@
-<p>Hello,</p>
+<p>Hello{% if report.recipient_name %} {{ report.recipient_name }}{% endif %},</p>
 <p>Please find the latest report for <strong>{{ student.full_name }}</strong> attached if a document was included.</p>
-<p>{{ report.summary|linebreaksbr }}</p>
+
+<h3>Student</h3>
+<p>
+    <strong>{{ student.full_name }}</strong><br>
+    Student ID: {{ student.student_id }}<br>
+    Grade: {{ student.grade }}<br>
+    {% if report.term %}Term: {{ report.term }}{% endif %}
+</p>
+
+<h3>Summary</h3>
+<p>{% if report.summary %}{{ report.summary|linebreaksbr }}{% else %}No summary provided.{% endif %}</p>
+
+<h3>Academic Progress</h3>
+<p>{% if report.academic_progress %}{{ report.academic_progress|linebreaksbr }}{% else %}No academic progress update provided.{% endif %}</p>
+
+<h3>Attendance Update</h3>
+<p>{% if report.attendance_update %}{{ report.attendance_update|linebreaksbr }}{% else %}No attendance update provided.{% endif %}</p>
+
+<h3>Counselling Update</h3>
+<p>{% if report.counselling_update %}{{ report.counselling_update|linebreaksbr }}{% else %}No counselling update provided.{% endif %}</p>
+
+<h3>Recommendations</h3>
+<p>{% if report.recommendations %}{{ report.recommendations|linebreaksbr }}{% else %}No recommendations provided.{% endif %}</p>
+
 <p>Best regards,<br>UIS Student Record System</p>

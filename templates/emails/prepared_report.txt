@@ -1,8 +1,27 @@
-Hello,
+Hello{% if report.recipient_name %} {{ report.recipient_name }}{% endif %},
 
 Please find the latest report for {{ student.full_name }} attached if a document was included.
 
-{{ report.summary }}
+Student
+{{ student.full_name }}
+Student ID: {{ student.student_id }}
+Grade: {{ student.grade }}
+{% if report.term %}Term: {{ report.term }}{% endif %}
+
+Summary
+{% if report.summary %}{{ report.summary }}{% else %}No summary provided.{% endif %}
+
+Academic Progress
+{% if report.academic_progress %}{{ report.academic_progress }}{% else %}No academic progress update provided.{% endif %}
+
+Attendance Update
+{% if report.attendance_update %}{{ report.attendance_update }}{% else %}No attendance update provided.{% endif %}
+
+Counselling Update
+{% if report.counselling_update %}{{ report.counselling_update }}{% else %}No counselling update provided.{% endif %}
+
+Recommendations
+{% if report.recommendations %}{{ report.recommendations }}{% else %}No recommendations provided.{% endif %}
 
 Best regards,
 UIS Student Record System
