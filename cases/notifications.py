@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import EmailMultiAlternatives, get_connection
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -19,11 +19,13 @@ def send_notification_email(subject, template_prefix, recipients, context, attac
         return False
     text_body = render_to_string(f"emails/{template_prefix}.txt", context)
     html_body = render_to_string(f"emails/{template_prefix}.html", context)
+    connection = get_connection(timeout=getattr(settings, "EMAIL_TIMEOUT", 10))
     email = EmailMultiAlternatives(
         subject,
         text_body,
         settings.DEFAULT_FROM_EMAIL,
         recipients,
+        connection=connection,
     )
     for attachment in attachments or []:
         if not attachment:
@@ -32,8 +34,7 @@ def send_notification_email(subject, template_prefix, recipients, context, attac
         email.attach(attachment.name.rsplit("/", 1)[-1], attachment.read())
         attachment.close()
     email.attach_alternative(html_body, "text/html")
-    email.send(fail_silently=True)
-    return True
+    return bool(email.send(fail_silently=True))
 
 
 def send_request_confirmation(student_request):
