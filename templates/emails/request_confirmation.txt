@@ -1,0 +1,8 @@
+Hello {{ student_request.submitted_by_name }},
+
+We received your request: {{ student_request.title }}.
+Request type: {{ student_request.get_request_type_display }}
+
+Our counselling team will review it and follow up soon.
+
+International High School Counselling Team

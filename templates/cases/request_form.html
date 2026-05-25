@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Edit Request | Student Case Tracker{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 mb-1">Update Request</h1>
+    <p class="text-muted mb-0">Review the request, assign ownership, and move it forward.</p>
+</div>
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                {% for field in form %}
+                    <div class="{% if field.name == 'details' or field.name == 'internal_notes' %}col-12{% else %}col-md-6{% endif %}">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <button class="btn btn-primary" type="submit">Save request</button>
+                <a class="btn btn-outline-secondary" href="{% url 'request_list' %}">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -18,6 +18,8 @@
     <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Missing documents</div><div class="stat-value">{{ stats.missing_documents }}</div></div></div></div>
     <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Payment issues</div><div class="stat-value">{{ stats.payment_issues }}</div></div></div></div>
     <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Homestay issues</div><div class="stat-value">{{ stats.homestay_issues }}</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Open requests</div><div class="stat-value">{{ stats.open_requests }}</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Upcoming sessions</div><div class="stat-value">{{ stats.upcoming_sessions }}</div></div></div></div>
 </div>
 <div class="row g-4">
     <div class="col-lg-7">
@@ -46,6 +48,22 @@
         </div>
     </div>
     <div class="col-lg-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h2 class="h5 mb-0">Recent student requests</h2>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for item in recent_requests %}
+                    <div class="list-group-item">
+                        <div class="fw-semibold">{{ item.get_request_type_display }}</div>
+                        <div class="small text-muted">{{ item.submitted_by_name }} | {{ item.get_status_display }}</div>
+                        <div class="small">{{ item.title }}</div>
+                    </div>
+                {% empty %}
+                    <div class="list-group-item text-muted">No recent requests yet.</div>
+                {% endfor %}
+            </div>
+        </div>
         <div class="card shadow-sm">
             <div class="card-header bg-white">
                 <h2 class="h5 mb-0">Recent audit activity</h2>

@@ -1,0 +1,10 @@
+<p>Hello,</p>
+<p>Your session for <strong>{{ session.student.full_name }}</strong> has been scheduled.</p>
+<ul>
+  <li>Date: {{ session.start_at|date:"F d, Y" }}</li>
+  <li>Time: {{ session.start_at|date:"g:i A" }} - {{ session.end_at|date:"g:i A" }}</li>
+  <li>Location: {{ session.location|default:"To be confirmed" }}</li>
+  <li>Meeting link: {{ session.meeting_link|default:"N/A" }}</li>
+</ul>
+<p><a href="{{ reschedule_url }}">Request a different time</a></p>
+<p>International High School Counselling Team</p>

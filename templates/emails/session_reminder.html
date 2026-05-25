@@ -1,0 +1,8 @@
+<p>Reminder:</p>
+<p><strong>{{ session.student.full_name }}</strong> has an upcoming session on {{ session.start_at|date:"F d, Y g:i A" }}.</p>
+<ul>
+  <li>Location: {{ session.location|default:"To be confirmed" }}</li>
+  <li>Meeting link: {{ session.meeting_link|default:"N/A" }}</li>
+</ul>
+<p><a href="{{ reschedule_url }}">Request a different time</a></p>
+<p>International High School Counselling Team</p>

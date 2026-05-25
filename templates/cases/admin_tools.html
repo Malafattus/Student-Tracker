@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Admin Tools | Student Case Tracker{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 mb-1">Admin Tools</h1>
+    <p class="text-muted mb-0">Download database backups and CSV snapshots for safekeeping.</p>
+</div>
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="h5">SQLite Backup</h2>
+                <p class="text-muted">Download the live SQLite database file for a full point-in-time backup.</p>
+                <a class="btn btn-primary" href="{% url 'download_db_backup' %}">Download database</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="h5">CSV Export Bundle</h2>
+                <p class="text-muted">Download students, requests, sessions, and tasks in a zip file of CSVs.</p>
+                <a class="btn btn-outline-primary" href="{% url 'download_csv_export' %}">Download CSV bundle</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

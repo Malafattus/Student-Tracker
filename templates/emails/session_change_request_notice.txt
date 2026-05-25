@@ -1,0 +1,7 @@
+{{ change_request.requester_name }} requested a change to the session for {{ session.student.full_name }}.
+
+Requested new slot:
+{{ change_request.requested_start|date:"F d, Y g:i A" }} - {{ change_request.requested_end|date:"g:i A" }}
+
+Reason:
+{{ change_request.reason }}

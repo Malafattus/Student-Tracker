@@ -6,9 +6,12 @@
         <h1 class="h3 mb-1">{{ student.full_name }}</h1>
         <p class="text-muted mb-0">{{ student.student_id }} | Grade {{ student.grade }} | {{ student.nationality }}</p>
     </div>
-    {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
-        <a class="btn btn-primary" href="{% url 'student_update' student.pk %}">Edit Student</a>
-    {% endif %}
+    <div class="d-flex gap-2">
+        {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+            <a class="btn btn-outline-primary" href="{% url 'student_portal_access' student.pk %}">Portal Access</a>
+            <a class="btn btn-primary" href="{% url 'student_update' student.pk %}">Edit Student</a>
+        {% endif %}
+    </div>
 </div>
 <div class="card shadow-sm mb-4">
     <div class="card-body">
@@ -16,6 +19,8 @@
             <li class="nav-item"><a class="nav-link {% if active_tab == 'overview' %}active{% endif %}" href="?tab=overview">Overview</a></li>
             <li class="nav-item"><a class="nav-link {% if active_tab == 'notes' %}active{% endif %}" href="?tab=notes">Notes</a></li>
             <li class="nav-item"><a class="nav-link {% if active_tab == 'tasks' %}active{% endif %}" href="?tab=tasks">Tasks</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_tab == 'requests' %}active{% endif %}" href="?tab=requests">Requests</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_tab == 'sessions' %}active{% endif %}" href="?tab=sessions">Sessions</a></li>
             <li class="nav-item"><a class="nav-link {% if active_tab == 'documents' %}active{% endif %}" href="?tab=documents">Documents</a></li>
             <li class="nav-item"><a class="nav-link {% if active_tab == 'communication' %}active{% endif %}" href="?tab=communication">Communication Log</a></li>
         </ul>
@@ -99,6 +104,71 @@
                             <tr><td>{{ task.title }}</td><td>{{ task.due_date }}</td><td>{{ task.get_priority_display }}</td><td>{{ task.get_status_display }}</td></tr>
                         {% empty %}
                             <tr><td colspan="4" class="text-muted text-center py-4">No tasks yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div></div>
+        </div>
+    </div>
+{% elif active_tab == 'requests' %}
+    <div class="row g-4">
+        <div class="col-lg-5">
+            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+                <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Log request</h2></div><div class="card-body">
+                    <form method="post" action="{% url 'student_request_add' student.pk %}">
+                        {% csrf_token %}
+                        {{ request_form.as_p }}
+                        <button class="btn btn-primary" type="submit">Save request</button>
+                    </form>
+                </div></div>
+            {% endif %}
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Request history</h2></div><div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Type</th><th>Title</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                        {% for item in student.requests.all %}
+                            <tr>
+                                <td>{{ item.get_request_type_display }}</td>
+                                <td>{{ item.title }}</td>
+                                <td>{{ item.get_status_display }}</td>
+                                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Edit</a></td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-4">No requests yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div></div>
+        </div>
+    </div>
+{% elif active_tab == 'sessions' %}
+    <div class="row g-4">
+        <div class="col-lg-5">
+            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+                <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Book session</h2></div><div class="card-body">
+                    <form method="get" action="{% url 'session_create' %}">
+                        <input type="hidden" name="student" value="{{ student.id }}">
+                        <button class="btn btn-primary" type="submit">Open booking form</button>
+                    </form>
+                </div></div>
+            {% endif %}
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Session history</h2></div><div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Slot</th><th>Type</th><th>Status</th><th>Counsellor</th></tr></thead>
+                    <tbody>
+                        {% for session in student.sessions.all %}
+                            <tr>
+                                <td>{{ session.start_at|date:"M j, Y g:i A" }}</td>
+                                <td>{{ session.get_session_type_display }}</td>
+                                <td>{{ session.get_status_display }}</td>
+                                <td>{{ session.counsellor.get_full_name|default:"Unassigned" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-4">No sessions yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

@@ -10,19 +10,27 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
         <div class="container-fluid">
-            <a class="navbar-brand fw-semibold" href="{% url 'dashboard' %}">Student Case Tracker</a>
+            <a class="navbar-brand fw-semibold" href="{% if role_flags.is_student %}{% url 'portal_dashboard' %}{% elif request.user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'student_request_public' %}{% endif %}">Student Case Tracker</a>
             {% if request.user.is_authenticated %}
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <div class="collapse navbar-collapse" id="navMenu">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item"><a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{% url 'student_list' %}">Students</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">Tasks</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{% url 'reports' %}">Reports</a></li>
-                        {% if role_flags.is_admin %}
-                            <li class="nav-item"><a class="nav-link" href="{% url 'user_management' %}">Users</a></li>
+                        {% if role_flags.is_student %}
+                            <li class="nav-item"><a class="nav-link" href="{% url 'portal_dashboard' %}">My Portal</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{% url 'portal_request_create' %}">New Request</a></li>
+                        {% else %}
+                            <li class="nav-item"><a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{% url 'student_list' %}">Students</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{% url 'request_list' %}">Requests</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{% url 'session_list' %}">Sessions</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">Tasks</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{% url 'reports' %}">Reports</a></li>
+                            {% if role_flags.is_admin %}
+                                <li class="nav-item"><a class="nav-link" href="{% url 'user_management' %}">Users</a></li>
+                                <li class="nav-item"><a class="nav-link" href="{% url 'admin_tools' %}">Admin Tools</a></li>
+                            {% endif %}
                         {% endif %}
                     </ul>
                     <div class="d-flex align-items-center gap-3">
@@ -32,6 +40,11 @@
                             <button class="btn btn-outline-light btn-sm" type="submit">Log out</button>
                         </form>
                     </div>
+                </div>
+            {% else %}
+                <div class="d-flex gap-2">
+                    <a class="btn btn-outline-light btn-sm" href="{% url 'student_request_public' %}">Student Request Form</a>
+                    <a class="btn btn-light btn-sm" href="{% url 'login' %}">Portal Login</a>
                 </div>
             {% endif %}
         </div>

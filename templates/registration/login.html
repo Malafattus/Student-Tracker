@@ -18,8 +18,9 @@
                         <form method="post">
                             {% csrf_token %}
                             <div class="mb-3">
-                                <label class="form-label" for="id_username">Username</label>
+                                <label class="form-label" for="id_username">Login ID</label>
                                 <input class="form-control" type="text" name="username" id="id_username" required>
+                                <div class="form-text">Use your username or email address.</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label" for="id_password">Password</label>
@@ -30,6 +31,9 @@
                             {% endif %}
                             <button class="btn btn-primary w-100" type="submit">Sign in</button>
                         </form>
+                        <div class="text-center mt-3">
+                            <a href="{% url 'student_request_public' %}">Student request form</a>
+                        </div>
                     </div>
                 </div>
             </div>

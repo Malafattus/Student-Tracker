@@ -1,0 +1,4 @@
+<p><strong>{{ change_request.requester_name }}</strong> requested a change to the session for <strong>{{ session.student.full_name }}</strong>.</p>
+<p>Requested new slot: {{ change_request.requested_start|date:"F d, Y g:i A" }} - {{ change_request.requested_end|date:"g:i A" }}</p>
+<p>Reason:</p>
+<p>{{ change_request.reason|linebreaksbr }}</p>
