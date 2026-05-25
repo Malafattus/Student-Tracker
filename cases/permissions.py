@@ -5,7 +5,8 @@ from django.core.exceptions import PermissionDenied
 ROLE_ADMIN = "Admin"
 ROLE_COUNSELLOR = "Counsellor"
 ROLE_VIEWER = "Viewer"
-ROLE_NAMES = [ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_VIEWER]
+ROLE_STUDENT = "Student"
+ROLE_NAMES = [ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_VIEWER, ROLE_STUDENT]
 
 
 def ensure_roles():
@@ -27,6 +28,10 @@ def is_counsellor(user):
 
 def is_viewer(user):
     return user_has_role(user, ROLE_VIEWER)
+
+
+def is_student(user):
+    return user_has_role(user, ROLE_STUDENT)
 
 
 def can_view_student(user, student):

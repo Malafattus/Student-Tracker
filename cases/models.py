@@ -1,4 +1,7 @@
+import uuid
+
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 
@@ -127,6 +130,14 @@ class Student(TimeStampedModel):
     def get_absolute_url(self):
         return reverse("student_detail", args=[self.pk])
 
+    def contact_emails(self):
+        emails = []
+        if self.parent_guardian_email:
+            emails.append(self.parent_guardian_email)
+        if hasattr(self, "portal_access") and self.portal_access.user.email:
+            emails.append(self.portal_access.user.email)
+        return emails
+
 
 class StudentNote(TimeStampedModel):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="notes")
@@ -223,6 +234,160 @@ class CommunicationLog(TimeStampedModel):
 
     def __str__(self):
         return f"{self.get_method_display()} with {self.contact_person}"
+
+
+class StudentRequest(TimeStampedModel):
+    REQUEST_TRANSCRIPT = "transcript"
+    REQUEST_COUNSELLING = "counselling"
+    REQUEST_DOCUMENT = "document"
+    REQUEST_OTHER = "other"
+
+    STATUS_NEW = "new"
+    STATUS_IN_REVIEW = "in_review"
+    STATUS_SCHEDULED = "scheduled"
+    STATUS_COMPLETED = "completed"
+    STATUS_CLOSED = "closed"
+
+    REQUEST_TYPE_CHOICES = [
+        (REQUEST_TRANSCRIPT, "Transcript Request"),
+        (REQUEST_COUNSELLING, "Counselling Session Request"),
+        (REQUEST_DOCUMENT, "Document Support Request"),
+        (REQUEST_OTHER, "Other Request"),
+    ]
+    STATUS_CHOICES = [
+        (STATUS_NEW, "New"),
+        (STATUS_IN_REVIEW, "In Review"),
+        (STATUS_SCHEDULED, "Scheduled"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_CLOSED, "Closed"),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.SET_NULL, null=True, blank=True, related_name="requests")
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_requests",
+    )
+    submitted_by_name = models.CharField(max_length=255)
+    submitted_by_email = models.EmailField()
+    student_identifier = models.CharField(max_length=50, blank=True)
+    request_type = models.CharField(max_length=30, choices=REQUEST_TYPE_CHOICES)
+    title = models.CharField(max_length=255)
+    details = models.TextField()
+    preferred_date = models.DateField(blank=True, null=True)
+    preferred_time = models.CharField(max_length=100, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
+    internal_notes = models.TextField(blank=True)
+    confirmation_sent_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["status", "-created_at"]
+
+    def __str__(self):
+        return f"{self.get_request_type_display()} - {self.submitted_by_name}"
+
+
+class CounsellingSession(TimeStampedModel):
+    TYPE_COUNSELLING = "counselling"
+    TYPE_TRANSCRIPT = "transcript"
+    TYPE_PARENT = "parent"
+    TYPE_OTHER = "other"
+
+    STATUS_SCHEDULED = "scheduled"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_NO_SHOW = "no_show"
+
+    SESSION_TYPE_CHOICES = [
+        (TYPE_COUNSELLING, "Counselling Session"),
+        (TYPE_TRANSCRIPT, "Transcript Meeting"),
+        (TYPE_PARENT, "Parent Meeting"),
+        (TYPE_OTHER, "Other"),
+    ]
+    STATUS_CHOICES = [
+        (STATUS_SCHEDULED, "Scheduled"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_CANCELLED, "Cancelled"),
+        (STATUS_NO_SHOW, "No Show"),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="sessions")
+    linked_request = models.ForeignKey(
+        StudentRequest,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sessions",
+    )
+    counsellor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="counselling_sessions",
+    )
+    session_type = models.CharField(max_length=30, choices=SESSION_TYPE_CHOICES, default=TYPE_COUNSELLING)
+    start_at = models.DateTimeField()
+    end_at = models.DateTimeField()
+    location = models.CharField(max_length=255, blank=True)
+    meeting_link = models.URLField(blank=True)
+    confirmation_email = models.EmailField(blank=True)
+    notes = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_SCHEDULED)
+    confirmation_sent_at = models.DateTimeField(blank=True, null=True)
+    reminder_sent_at = models.DateTimeField(blank=True, null=True)
+    reschedule_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
+    class Meta:
+        ordering = ["start_at"]
+
+    def __str__(self):
+        return f"{self.student.full_name} - {self.start_at:%Y-%m-%d %H:%M}"
+
+    def clean(self):
+        if self.end_at and self.start_at and self.end_at <= self.start_at:
+            raise ValidationError("Session end time must be after the start time.")
+
+
+class SessionChangeRequest(TimeStampedModel):
+    STATUS_NEW = "new"
+    STATUS_REVIEWED = "reviewed"
+    STATUS_SCHEDULED = "scheduled"
+
+    STATUS_CHOICES = [
+        (STATUS_NEW, "New"),
+        (STATUS_REVIEWED, "Reviewed"),
+        (STATUS_SCHEDULED, "Rescheduled"),
+    ]
+
+    session = models.ForeignKey(CounsellingSession, on_delete=models.CASCADE, related_name="change_requests")
+    requester_name = models.CharField(max_length=255)
+    requester_email = models.EmailField()
+    requested_start = models.DateTimeField()
+    requested_end = models.DateTimeField()
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Reschedule request for {self.session}"
+
+
+class StudentPortalAccess(TimeStampedModel):
+    student = models.OneToOneField(Student, on_delete=models.CASCADE, related_name="portal_access")
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="student_portal")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Student portal access"
+        verbose_name_plural = "Student portal access"
+
+    def __str__(self):
+        return f"{self.student.full_name} portal access"
 
 
 class AuditLog(models.Model):
