@@ -26,6 +26,11 @@ class Student(TimeStampedModel):
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_ACTIVE = "active"
     STATUS_CLOSED = "closed"
+    OSSLT_PENDING = "pending"
+    OSSLT_PASSED = "passed"
+    OSSLT_OLC4O = "olc4o"
+    OSSLT_OLC4O_COMPLETED = "olc4o_completed"
+    OSSLT_EXEMPT = "exempt"
     STAGE_NEW = "new"
     STAGE_ACTIVE = "active"
     STAGE_WAITING_STUDENT = "waiting_student"
@@ -99,10 +104,18 @@ class Student(TimeStampedModel):
         (STAGE_APPLICATION, "Application in Progress"),
         (STAGE_RESOLVED, "Resolved"),
     ]
+    OSSLT_STATUS_CHOICES = [
+        (OSSLT_PENDING, "Pending"),
+        (OSSLT_PASSED, "Passed OSSLT"),
+        (OSSLT_OLC4O, "Needs OLC4O"),
+        (OSSLT_OLC4O_COMPLETED, "Completed OLC4O"),
+        (OSSLT_EXEMPT, "Exempt"),
+    ]
 
     full_name = models.CharField(max_length=255)
     student_id = models.CharField(max_length=50, unique=True)
     grade = models.CharField(max_length=20)
+    date_of_birth = models.DateField(blank=True, null=True)
     nationality = models.CharField(max_length=100)
     support_team = models.CharField(max_length=100, blank=True)
     preferred_language = models.CharField(max_length=100, blank=True)
@@ -136,6 +149,10 @@ class Student(TimeStampedModel):
     internal_summary = models.TextField(blank=True)
     case_stage = models.CharField(max_length=30, choices=CASE_STAGE_CHOICES, default=STAGE_ACTIVE)
     next_review_date = models.DateField(blank=True, null=True)
+    required_credits = models.PositiveSmallIntegerField(default=30)
+    volunteer_hours_required = models.PositiveSmallIntegerField(default=40)
+    volunteer_hours_completed = models.PositiveSmallIntegerField(default=0)
+    osslt_status = models.CharField(max_length=30, choices=OSSLT_STATUS_CHOICES, default=OSSLT_PENDING)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -157,6 +174,18 @@ class Student(TimeStampedModel):
             if parent_access.user.email:
                 emails.append(parent_access.user.email)
         return emails
+
+    @property
+    def earned_credits(self):
+        return sum(record.earned_credit_count for record in self.term_records.all())
+
+    @property
+    def credits_remaining(self):
+        return max(self.required_credits - self.earned_credits, 0)
+
+    @property
+    def volunteer_hours_remaining(self):
+        return max(self.volunteer_hours_required - self.volunteer_hours_completed, 0)
 
 
 class CounsellorProfile(TimeStampedModel):
@@ -189,6 +218,8 @@ class AcademicTerm(TimeStampedModel):
 class StudentTermRecord(TimeStampedModel):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="term_records")
     term = models.ForeignKey(AcademicTerm, on_delete=models.CASCADE, related_name="student_records")
+    planned_course_count = models.PositiveSmallIntegerField(default=0)
+    is_completed = models.BooleanField(default=False)
     academic_summary = models.TextField(blank=True)
     attendance_summary = models.TextField(blank=True)
     counselling_summary = models.TextField(blank=True)
@@ -200,6 +231,18 @@ class StudentTermRecord(TimeStampedModel):
 
     def __str__(self):
         return f"{self.student.full_name} - {self.term}"
+
+    @property
+    def course_load(self):
+        actual_courses = self.courses.count()
+        return actual_courses or self.planned_course_count
+
+    @property
+    def earned_credit_count(self):
+        if not self.is_completed:
+            return 0
+        actual_courses = self.courses.count()
+        return actual_courses or self.planned_course_count
 
 
 class TermCourseEnrollment(TimeStampedModel):

@@ -54,6 +54,10 @@
                                 <h3 class="section-title h5">Current standing</h3>
                                 <div class="student-info-grid">
                                     <div>
+                                        <div class="student-info-label">Date of birth</div>
+                                        <div class="student-info-value">{{ record.student.date_of_birth|default:"Not shared yet" }}</div>
+                                    </div>
+                                    <div>
                                         <div class="student-info-label">Academic status</div>
                                         <div class="student-info-value">{{ record.student.get_academic_status_display }}</div>
                                     </div>
@@ -68,6 +72,26 @@
                                     <div>
                                         <div class="student-info-label">Next review</div>
                                         <div class="student-info-value">{{ record.student.next_review_date|default:"Not set" }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="student-info-label">Credits earned</div>
+                                        <div class="student-info-value">{{ record.student.earned_credits }} / {{ record.student.required_credits }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="student-info-label">Credits remaining</div>
+                                        <div class="student-info-value">{{ record.student.credits_remaining }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="student-info-label">Volunteer hours</div>
+                                        <div class="student-info-value">{{ record.student.volunteer_hours_completed }} / {{ record.student.volunteer_hours_required }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="student-info-label">Volunteer hours remaining</div>
+                                        <div class="student-info-value">{{ record.student.volunteer_hours_remaining }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="student-info-label">OSSLT status</div>
+                                        <div class="student-info-value">{{ record.student.get_osslt_status_display }}</div>
                                     </div>
                                 </div>
                             </div>
@@ -137,6 +161,7 @@
                                     {% for term_record in record.term_records %}
                                         <div class="stacked-list-item">
                                             <div class="fw-semibold">{{ term_record.term }}</div>
+                                            <div class="small text-muted mb-2">{% if term_record.is_completed %}Completed{% else %}In progress{% endif %} | Course load: {{ term_record.course_load }}</div>
                                             <div class="small text-muted mb-2">{{ term_record.academic_summary|default:"No academic note yet." }}</div>
                                             <div class="small text-muted">{{ term_record.counselling_summary|default:"No counselling update yet." }}</div>
                                         </div>

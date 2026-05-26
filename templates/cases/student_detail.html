@@ -111,6 +111,7 @@
         <div class="col-lg-6"><div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Case overview</h2></div><div class="card-body detail-grid">
             <div><strong>Assigned counsellor:</strong> {{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</div>
             <div><strong>Support team:</strong> {{ student.support_team|default:"Not set" }}</div>
+            <div><strong>Date of birth:</strong> {{ student.date_of_birth|default:"-" }}</div>
             <div><strong>Case stage:</strong> {{ student.get_case_stage_display }}</div>
             <div><strong>Next review date:</strong> {{ student.next_review_date|default:"-" }}</div>
             <div><strong>Agency:</strong> {{ student.agency|default:"-" }}</div>
@@ -119,10 +120,14 @@
             <div><strong>Target program:</strong> {{ student.target_program|default:"-" }}</div>
             <div><strong>Universities:</strong> {{ student.target_universities|default:"-" }}</div>
             <div><strong>Academic status:</strong> {{ student.get_academic_status_display }}</div>
-            <div><strong>OSSD credits:</strong> {{ student.get_ossd_credit_progress_display }}</div>
+            <div><strong>Credits earned:</strong> {{ student.earned_credits }} / {{ student.required_credits }}</div>
+            <div><strong>Credits remaining:</strong> {{ student.credits_remaining }}</div>
             <div><strong>Graduation:</strong> {{ student.get_graduation_status_display }}</div>
             <div><strong>Counselling:</strong> {{ student.get_counselling_status_display }}</div>
             <div><strong>Application status:</strong> {{ student.get_university_application_status_display }}</div>
+            <div><strong>OSSLT status:</strong> {{ student.get_osslt_status_display }}</div>
+            <div><strong>Volunteer hours:</strong> {{ student.volunteer_hours_completed }} / {{ student.volunteer_hours_required }}</div>
+            <div><strong>Volunteer hours remaining:</strong> {{ student.volunteer_hours_remaining }}</div>
             <div><strong>Risk level:</strong> {{ student.get_overall_risk_level_display }}</div>
             <div><strong>Payment status:</strong> {{ student.get_payment_status_display }}</div>
             <div><strong>Homestay status:</strong> {{ student.get_homestay_status_display }}</div>
@@ -387,11 +392,12 @@
                 {% for record in student.term_records.all %}
                     <div class="border rounded p-3 mb-3">
                         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                            <div>
-                                <h3 class="h6 mb-1">{{ record.term }}</h3>
+                                <div>
+                                    <h3 class="h6 mb-1">{{ record.term }}</h3>
                                 {% if record.term.start_date and record.term.end_date %}
                                     <div class="small text-muted">{{ record.term.start_date }} to {{ record.term.end_date }}</div>
                                 {% endif %}
+                                <div class="small text-muted">{% if record.is_completed %}Completed{% else %}In progress{% endif %} | Course load: {{ record.course_load }}</div>
                             </div>
                         </div>
                         <p><strong>Academic:</strong> {{ record.academic_summary|default:"-" }}</p>
@@ -405,7 +411,7 @@
                                     {% for course in record.courses.all %}
                                         <tr><td>{{ course.course_name }}</td><td>{{ course.course_code|default:"-" }}</td><td>{{ course.teacher_name|default:"-" }}</td><td>{{ course.current_mark|default:"-" }}</td><td>{{ course.notes|default:"-" }}</td></tr>
                                     {% empty %}
-                                        <tr><td colspan="5" class="text-muted text-center">No courses added yet.</td></tr>
+                                        <tr><td colspan="5" class="text-muted text-center">{% if record.planned_course_count %}{{ record.planned_course_count }} course{{ record.planned_course_count|pluralize }} planned for this term.{% else %}No courses added yet.{% endif %}</td></tr>
                                     {% endfor %}
                                 </tbody>
                             </table>

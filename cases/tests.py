@@ -3,6 +3,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import (
+    AcademicTerm,
     CommunicationLog,
     CommunicationTemplate,
     CounsellorProfile,
@@ -15,6 +16,8 @@ from .models import (
     Student,
     StudentPortalAccess,
     StudentRequest,
+    StudentTermRecord,
+    TermCourseEnrollment,
 )
 from .permissions import ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_PARENT, ROLE_STUDENT, ensure_roles
 
@@ -285,6 +288,10 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(request_item.student_identifier, self.student.student_id)
 
     def test_parent_portal_only_shows_linked_children(self):
+        term = AcademicTerm.objects.create(school_year="2026-2027", name="Term 1", display_order=1, is_active=True)
+        record = StudentTermRecord.objects.create(student=self.student, term=term, planned_course_count=3, is_completed=True)
+        TermCourseEnrollment.objects.create(term_record=record, course_name="ENG4U")
+        TermCourseEnrollment.objects.create(term_record=record, course_name="MHF4U")
         sibling = Student.objects.create(
             full_name="Sibling Student",
             student_id="S5555",
@@ -313,6 +320,21 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertContains(response, "Test Student")
         self.assertContains(response, "Sibling Student")
         self.assertNotContains(response, "Unlinked Student")
+        self.assertContains(response, "2 / 30")
+        self.assertContains(response, "28")
+
+    def test_student_credit_and_volunteer_progress_properties(self):
+        self.student.required_credits = 30
+        self.student.volunteer_hours_required = 40
+        self.student.volunteer_hours_completed = 12
+        self.student.save()
+        term = AcademicTerm.objects.create(school_year="2026-2027", name="Term 1", display_order=1, is_active=True)
+        record = StudentTermRecord.objects.create(student=self.student, term=term, planned_course_count=3, is_completed=True)
+        TermCourseEnrollment.objects.create(term_record=record, course_name="ENG4U")
+        TermCourseEnrollment.objects.create(term_record=record, course_name="MHF4U")
+        self.assertEqual(self.student.earned_credits, 2)
+        self.assertEqual(self.student.credits_remaining, 28)
+        self.assertEqual(self.student.volunteer_hours_remaining, 28)
 
     def test_parent_role_without_links_sees_setup_page(self):
         parent_user = User.objects.create_user("parent2", email="parent2@example.com", password="pass12345")

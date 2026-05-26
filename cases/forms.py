@@ -85,6 +85,7 @@ class StudentForm(forms.ModelForm):
             "full_name",
             "student_id",
             "grade",
+            "date_of_birth",
             "nationality",
             "support_team",
             "preferred_language",
@@ -108,11 +109,16 @@ class StudentForm(forms.ModelForm):
             "target_universities",
             "ielts_english_status",
             "university_application_status",
+            "required_credits",
+            "volunteer_hours_required",
+            "volunteer_hours_completed",
+            "osslt_status",
             "overall_risk_level",
             "internal_summary",
             "is_active",
         ]
         widgets = {
+            "date_of_birth": DateInput(),
             "next_review_date": DateInput(),
             "attendance_concerns": forms.Textarea(attrs={"rows": 3}),
             "target_universities": forms.Textarea(attrs={"rows": 3}),
@@ -625,7 +631,15 @@ class RequestTaskForm(forms.ModelForm):
 class StudentTermRecordForm(forms.ModelForm):
     class Meta:
         model = StudentTermRecord
-        fields = ["term", "academic_summary", "attendance_summary", "counselling_summary", "agent_notes"]
+        fields = [
+            "term",
+            "planned_course_count",
+            "is_completed",
+            "academic_summary",
+            "attendance_summary",
+            "counselling_summary",
+            "agent_notes",
+        ]
         widgets = {
             "academic_summary": forms.Textarea(attrs={"rows": 3}),
             "attendance_summary": forms.Textarea(attrs={"rows": 3}),

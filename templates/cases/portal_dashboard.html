@@ -96,6 +96,10 @@
                 </div>
                 <div class="student-info-grid">
                     <div class="student-info-item">
+                        <div class="student-info-label">Date of birth</div>
+                        <div class="student-info-value">{{ student.date_of_birth|default:"Not shared yet" }}</div>
+                    </div>
+                    <div class="student-info-item">
                         <div class="student-info-label">Preferred language</div>
                         <div class="student-info-value">{{ student.preferred_language|default:"Not set" }}</div>
                     </div>
@@ -126,6 +130,26 @@
                     <div class="student-info-item">
                         <div class="student-info-label">Homestay status</div>
                         <div class="student-info-value">{{ student.get_homestay_status_display }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Credits earned</div>
+                        <div class="student-info-value">{{ student.earned_credits }} / {{ student.required_credits }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Credits remaining</div>
+                        <div class="student-info-value">{{ student.credits_remaining }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Volunteer hours</div>
+                        <div class="student-info-value">{{ student.volunteer_hours_completed }} / {{ student.volunteer_hours_required }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Volunteer hours remaining</div>
+                        <div class="student-info-value">{{ student.volunteer_hours_remaining }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">OSSLT status</div>
+                        <div class="student-info-value">{{ student.get_osslt_status_display }}</div>
                     </div>
                 </div>
                 {% if student.internal_summary %}
@@ -202,6 +226,9 @@
                                     {% if record.term.start_date and record.term.end_date %}
                                         <div class="student-term-dates">{{ record.term.start_date }} to {{ record.term.end_date }}</div>
                                     {% endif %}
+                                    <div class="student-term-dates">
+                                        {% if record.is_completed %}Completed{% else %}In progress{% endif %} | Course load: {{ record.course_load }}
+                                    </div>
                                 </div>
                             </div>
                             <div class="student-term-summary">
@@ -219,7 +246,7 @@
                                         <div class="student-course-mark">{{ course.current_mark|default:"-" }}</div>
                                     </div>
                                 {% empty %}
-                                    <div class="student-empty-inline">No courses recorded yet.</div>
+                                    <div class="student-empty-inline">{% if record.planned_course_count %}{{ record.planned_course_count }} course{{ record.planned_course_count|pluralize }} planned for this term.{% else %}No courses recorded yet.{% endif %}</div>
                                 {% endfor %}
                             </div>
                         </article>
