@@ -126,7 +126,7 @@
             <div><strong>Counselling:</strong> {{ student.get_counselling_status_display }}</div>
             <div><strong>Application status:</strong> {{ student.get_university_application_status_display }}</div>
             <div><strong>OSSLT status:</strong> {{ student.get_osslt_status_display }}</div>
-            <div><strong>Volunteer hours:</strong> {{ student.volunteer_hours_completed }} / {{ student.volunteer_hours_required }}</div>
+            <div><strong>Volunteer hours:</strong> {{ student.volunteer_hours_completed_total }} / {{ student.volunteer_hours_required }}</div>
             <div><strong>Volunteer hours remaining:</strong> {{ student.volunteer_hours_remaining }}</div>
             <div><strong>Risk level:</strong> {{ student.get_overall_risk_level_display }}</div>
             <div><strong>Payment status:</strong> {{ student.get_payment_status_display }}</div>
@@ -148,6 +148,75 @@
             <p><strong>Attendance concerns:</strong><br>{{ student.attendance_concerns|default:"No concerns recorded." }}</p>
             <p class="mb-0"><strong>Internal summary:</strong><br>{{ student.internal_summary|default:"No summary yet." }}</p>
         </div></div></div>
+    </div>
+    <div class="row g-4 mt-1">
+        <div class="col-lg-5">
+            <div class="card shadow-sm premium-card h-100">
+                <div class="card-header bg-white border-0 pb-0">
+                    <span class="section-kicker">Academics</span>
+                    <h2 class="section-title mb-1">Progress snapshot</h2>
+                    <p class="section-subtitle mb-0">The main graduation and reporting signals for this student.</p>
+                </div>
+                <div class="card-body">
+                    <div class="mini-stat-grid dashboard-secondary-stats mb-4">
+                        <div class="mini-stat-card"><div class="mini-stat-label">Completed credits</div><div class="mini-stat-value">{{ student.earned_credits }}</div></div>
+                        <div class="mini-stat-card"><div class="mini-stat-label">Credits remaining</div><div class="mini-stat-value">{{ student.credits_remaining }}</div></div>
+                        <div class="mini-stat-card"><div class="mini-stat-label">Volunteer hours left</div><div class="mini-stat-value">{{ student.volunteer_hours_remaining }}</div></div>
+                        <div class="mini-stat-card"><div class="mini-stat-label">OSSLT</div><div class="mini-stat-value">{{ student.get_osslt_status_display }}</div></div>
+                    </div>
+                    <div class="status-panel subtle">
+                        <div class="status-label">Report readiness</div>
+                        <div class="status-value">
+                            {% if term_progress_rows %}
+                                {{ term_progress_rows|length }} tracked term{{ term_progress_rows|length|pluralize }}
+                            {% else %}
+                                No term plan yet
+                            {% endif %}
+                        </div>
+                        <div class="status-detail">Use the term history section to add courses, record grades, and prepare progress reports at the right checkpoints.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card shadow-sm premium-card h-100">
+                <div class="card-header bg-white border-0 pb-0">
+                    <span class="section-kicker">Terms</span>
+                    <h2 class="section-title mb-1">Checkpoint tracker</h2>
+                    <p class="section-subtitle mb-0">See which terms still need setup, grades, or final credit confirmation.</p>
+                </div>
+                <div class="card-body">
+                    <div class="stacked-list">
+                        {% for item in term_progress_rows %}
+                            <div class="stacked-list-item">
+                                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
+                                    <div>
+                                        <div class="fw-semibold">{{ item.record.term }}</div>
+                                        <div class="small text-muted">
+                                            Course load: {{ item.record.course_load }} | Completed credits: {{ item.record.earned_credit_count }}
+                                        </div>
+                                    </div>
+                                    <span class="badge {{ item.badge_class }}">{{ item.status_label }}</span>
+                                </div>
+                                <div class="small text-muted mb-2">{{ item.detail }}</div>
+                                <div class="dashboard-chip-row">
+                                    <span class="dashboard-chip">Midterms recorded: {{ item.midterm_recorded }} / {{ item.record.course_load }}</span>
+                                    <span class="dashboard-chip">Finals recorded: {{ item.final_recorded }} / {{ item.record.course_load }}</span>
+                                    {% if item.checkpoint_date %}
+                                        <span class="dashboard-chip">{{ item.checkpoint_type|title }} checkpoint: {{ item.checkpoint_date }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="empty-state-panel compact">
+                                <div class="empty-state-title">No term plan yet</div>
+                                <div class="empty-state-copy">Add the student's first term record to start tracking courses, grades, and earned credits properly.</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 {% elif active_tab == 'notes' %}
     <div class="row g-4">

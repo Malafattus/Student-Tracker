@@ -718,7 +718,16 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
 
     def get_queryset(self):
         return student_queryset_for_user(self.request.user).prefetch_related(
-            "notes", "tasks", "documents", "communications", "requests", "sessions"
+            "notes",
+            "tasks",
+            "documents",
+            "communications",
+            "requests",
+            "sessions",
+            "term_records__term",
+            "term_records__courses",
+            "parent_access_links__user",
+            "prepared_reports",
         )
 
     def get_context_data(self, **kwargs):
@@ -737,6 +746,8 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
         upcoming_session = active_sessions.filter(start_at__gte=timezone.now()).order_by("start_at").first()
         urgent_tasks = active_tasks.filter(status__in=[FollowUpTask.STATUS_OPEN, FollowUpTask.STATUS_IN_PROGRESS]).order_by("due_date")[:3]
         missing_documents = self.object.documents.filter(status="missing")
+        term_records = self.object.term_records.select_related("term").prefetch_related("courses").all()
+        today = timezone.localdate()
         context["active_tab"] = self.request.GET.get("tab", "overview")
         context["can_manage_student"] = can_edit_student(self.request.user, self.object)
         context["note_form"] = StudentNoteForm()
@@ -784,6 +795,40 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
         context["missing_documents"] = missing_documents
         context["parent_access_links"] = self.object.parent_access_links.select_related("user")
         context["pending_access_requests"] = self.object.access_requests.filter(status=CounsellorAccessRequest.STATUS_PENDING)
+        context["term_progress_rows"] = []
+        for record in term_records:
+            checkpoint_date, checkpoint_type = record.next_report_checkpoint
+            status_label = "On track"
+            badge_class = "text-bg-success"
+            detail = "No immediate academic action is needed for this term."
+            if record.course_load == 0:
+                status_label = "Needs setup"
+                badge_class = "text-bg-warning"
+                detail = "Set the number of courses or add the exact classes for this term."
+            elif checkpoint_type == "midterm":
+                status_label = "Midterm grades due"
+                badge_class = "text-bg-warning"
+                detail = "Enter midterm grades and prepare the midterm report update."
+            elif checkpoint_type == "final":
+                status_label = "Final grades due"
+                badge_class = "text-bg-danger"
+                detail = "Enter final grades, confirm earned credits, and prepare the final report."
+            elif record.is_completed and record.earned_credit_count < record.course_load:
+                status_label = "Credits still pending"
+                badge_class = "text-bg-danger"
+                detail = "Some courses in this completed term did not yet earn credit."
+            context["term_progress_rows"].append(
+                {
+                    "record": record,
+                    "status_label": status_label,
+                    "badge_class": badge_class,
+                    "detail": detail,
+                    "checkpoint_date": checkpoint_date,
+                    "checkpoint_type": checkpoint_type,
+                    "midterm_recorded": record.midterm_recorded_count,
+                    "final_recorded": record.final_recorded_count,
+                }
+            )
         context["student_actions"] = [
             {
                 "title": "Log a request",
@@ -824,6 +869,11 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
                 "label": "Missing documents",
                 "value": missing_documents.count(),
                 "detail": "Items still blocking progress",
+            },
+            {
+                "label": "Credits left",
+                "value": self.object.credits_remaining,
+                "detail": f"{self.object.earned_credits} completed so far",
             },
         ]
         return context

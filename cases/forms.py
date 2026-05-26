@@ -110,8 +110,9 @@ class StudentForm(forms.ModelForm):
             "ielts_english_status",
             "university_application_status",
             "required_credits",
+            "credits_remaining_manual",
             "volunteer_hours_required",
-            "volunteer_hours_completed",
+            "volunteer_hours_remaining_manual",
             "osslt_status",
             "overall_risk_level",
             "internal_summary",
@@ -128,6 +129,12 @@ class StudentForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["assigned_counsellor"].queryset = User.objects.filter(groups__name="Counsellor").distinct()
+        self.fields["required_credits"].label = "Total credits required"
+        self.fields["credits_remaining_manual"].label = "Credits remaining"
+        self.fields["credits_remaining_manual"].help_text = "Enter how many credits the student still needs."
+        self.fields["volunteer_hours_required"].label = "Total volunteer hours required"
+        self.fields["volunteer_hours_remaining_manual"].label = "Volunteer hours remaining"
+        self.fields["volunteer_hours_remaining_manual"].help_text = "Enter how many volunteer hours the student still needs."
         apply_bootstrap_classes(self)
 
 

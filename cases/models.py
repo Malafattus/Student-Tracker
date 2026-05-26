@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -150,8 +151,10 @@ class Student(TimeStampedModel):
     case_stage = models.CharField(max_length=30, choices=CASE_STAGE_CHOICES, default=STAGE_ACTIVE)
     next_review_date = models.DateField(blank=True, null=True)
     required_credits = models.PositiveSmallIntegerField(default=30)
+    credits_remaining_manual = models.PositiveSmallIntegerField(blank=True, null=True)
     volunteer_hours_required = models.PositiveSmallIntegerField(default=40)
     volunteer_hours_completed = models.PositiveSmallIntegerField(default=0)
+    volunteer_hours_remaining_manual = models.PositiveSmallIntegerField(blank=True, null=True)
     osslt_status = models.CharField(max_length=30, choices=OSSLT_STATUS_CHOICES, default=OSSLT_PENDING)
     is_active = models.BooleanField(default=True)
 
@@ -176,15 +179,31 @@ class Student(TimeStampedModel):
         return emails
 
     @property
-    def earned_credits(self):
+    def term_earned_credits(self):
         return sum(record.earned_credit_count for record in self.term_records.all())
 
     @property
+    def earned_credits(self):
+        if self.credits_remaining_manual is not None:
+            return max(self.required_credits - self.credits_remaining_manual, 0)
+        return self.term_earned_credits
+
+    @property
     def credits_remaining(self):
-        return max(self.required_credits - self.earned_credits, 0)
+        if self.credits_remaining_manual is not None:
+            return min(max(self.credits_remaining_manual, 0), self.required_credits)
+        return max(self.required_credits - self.term_earned_credits, 0)
+
+    @property
+    def volunteer_hours_completed_total(self):
+        if self.volunteer_hours_remaining_manual is not None:
+            return max(self.volunteer_hours_required - self.volunteer_hours_remaining_manual, 0)
+        return min(self.volunteer_hours_completed, self.volunteer_hours_required)
 
     @property
     def volunteer_hours_remaining(self):
+        if self.volunteer_hours_remaining_manual is not None:
+            return min(max(self.volunteer_hours_remaining_manual, 0), self.volunteer_hours_required)
         return max(self.volunteer_hours_required - self.volunteer_hours_completed, 0)
 
 
@@ -215,14 +234,32 @@ class AcademicTerm(TimeStampedModel):
         return f"{self.school_year} {self.name}"
 
     @property
+    def duration_days(self):
+        if not self.start_date or not self.end_date:
+            return None
+        return (self.end_date - self.start_date).days
+
+    @property
+    def is_standard_length_term(self):
+        duration_days = self.duration_days
+        return duration_days is not None and duration_days >= 56
+
+    @property
     def midterm_checkpoint_date(self):
         if not self.start_date or not self.end_date:
             return None
+        if self.is_standard_length_term:
+            return self.start_date + timedelta(weeks=5)
         duration = self.end_date - self.start_date
         return self.start_date + duration / 2
 
     @property
     def final_checkpoint_date(self):
+        if not self.start_date or not self.end_date:
+            return None
+        if self.is_standard_length_term:
+            ten_week_mark = self.start_date + timedelta(weeks=10)
+            return ten_week_mark if ten_week_mark <= self.end_date else self.end_date
         return self.end_date
 
 

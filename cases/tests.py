@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.contrib.auth.models import Group, User
 from django.core.management import call_command
@@ -84,6 +84,24 @@ class CaseTrackerSmokeTests(TestCase):
         response = client.get(reverse("student_detail", args=[self.student.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Case stage and next steps")
+
+    def test_student_detail_shows_checkpoint_tracker(self):
+        term = AcademicTerm.objects.create(
+            school_year="2026-2027",
+            name="Term 1",
+            display_order=1,
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 11, 17),
+            is_active=True,
+        )
+        record = StudentTermRecord.objects.create(student=self.student, term=term, planned_course_count=3)
+        TermCourseEnrollment.objects.create(term_record=record, course_name="ENG4U", midterm_grade=74)
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("student_detail", args=[self.student.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Checkpoint tracker")
+        self.assertContains(response, "Midterms recorded: 1 / 1")
 
     def test_counsellor_can_open_communication_center(self):
         client = Client()
@@ -324,6 +342,8 @@ class CaseTrackerSmokeTests(TestCase):
         record = StudentTermRecord.objects.create(student=self.student, term=term, planned_course_count=3, is_completed=True)
         TermCourseEnrollment.objects.create(term_record=record, course_name="ENG4U", final_grade=78)
         TermCourseEnrollment.objects.create(term_record=record, course_name="MHF4U", final_grade=72)
+        self.student.credits_remaining_manual = 28
+        self.student.save(update_fields=["credits_remaining_manual", "updated_at"])
         sibling = Student.objects.create(
             full_name="Sibling Student",
             student_id="S5555",
@@ -357,8 +377,9 @@ class CaseTrackerSmokeTests(TestCase):
 
     def test_student_credit_and_volunteer_progress_properties(self):
         self.student.required_credits = 30
+        self.student.credits_remaining_manual = 28
         self.student.volunteer_hours_required = 40
-        self.student.volunteer_hours_completed = 12
+        self.student.volunteer_hours_remaining_manual = 28
         self.student.save()
         term = AcademicTerm.objects.create(school_year="2026-2027", name="Term 1", display_order=1, is_active=True)
         record = StudentTermRecord.objects.create(student=self.student, term=term, planned_course_count=3, is_completed=True)
@@ -368,6 +389,7 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(self.student.earned_credits, 2)
         self.assertEqual(self.student.credits_remaining, 28)
         self.assertEqual(self.student.volunteer_hours_remaining, 28)
+        self.assertEqual(self.student.volunteer_hours_completed_total, 12)
 
     def test_term_progress_reminder_command_marks_midterm_and_final(self):
         today = timezone.localdate()
@@ -397,6 +419,18 @@ class CaseTrackerSmokeTests(TestCase):
         call_command("send_term_progress_reminders")
         record.refresh_from_db()
         self.assertIsNotNone(record.final_reminder_sent_at)
+
+    def test_academic_term_uses_week_milestones_for_standard_terms(self):
+        term = AcademicTerm.objects.create(
+            school_year="2026-2027",
+            name="Term 2",
+            display_order=2,
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 11, 17),
+            is_active=True,
+        )
+        self.assertEqual(term.midterm_checkpoint_date, date(2026, 10, 6))
+        self.assertEqual(term.final_checkpoint_date, date(2026, 11, 10))
 
     def test_parent_role_without_links_sees_setup_page(self):
         parent_user = User.objects.create_user("parent2", email="parent2@example.com", password="pass12345")
