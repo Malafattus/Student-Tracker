@@ -1,146 +1,203 @@
 {% extends "base.html" %}
 {% block title %}Sessions | UIS Student Record System{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-    <div>
-        <h1 class="h3 mb-1">Session Timetable</h1>
-        <p class="text-muted mb-0">Book counselling slots, track upcoming sessions, and send reminders.</p>
-    </div>
-    <a class="btn btn-primary" href="{% url 'session_create' %}">Book Session</a>
-</div>
-<div class="alert alert-light border mb-4">
-    <strong>Workflow tip:</strong> approve counselling requests from the request queue, then book the session here. Approved requests show in the pending section below until a slot is booked.
-</div>
-{% if current_scope != "history" %}
-<div class="card shadow-sm mb-4">
-    <div class="card-body">
-        <form method="get" class="row g-3">
-            <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All</option>{% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
-            <div class="col-md-3"><label class="form-label">Type</label><select class="form-select" name="session_type"><option value="">All</option>{% for value, label in type_choices %}<option value="{{ value }}" {% if request.GET.session_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
-            <div class="col-md-3"><label class="form-label">Section</label><select class="form-select" name="scope"><option value="active" {% if current_scope == 'active' %}selected{% endif %}>Active timetable</option><option value="history" {% if current_scope == 'history' %}selected{% endif %}>Closed history</option></select></div>
-            <div class="col-md-3 d-flex align-items-end gap-2"><button class="btn btn-primary" type="submit">Apply</button><a class="btn btn-outline-secondary" href="{% url 'session_list' %}">Reset</a></div>
-        </form>
-    </div>
-</div>
-<div class="card shadow-sm mb-4">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <h2 class="h5 mb-0">Calendar view</h2>
-        <div class="d-flex align-items-center gap-2">
-            <a class="btn btn-sm btn-outline-secondary" href="?year={{ prev_month.0 }}&month={{ prev_month.1 }}">Previous</a>
-            <span class="fw-semibold">{{ calendar_month|date:"F Y" }}</span>
-            <a class="btn btn-sm btn-outline-secondary" href="?year={{ next_month.0 }}&month={{ next_month.1 }}">Next</a>
-        </div>
-    </div>
-    <div class="card-body border-top bg-light-subtle">
-        <div class="d-flex gap-3 small text-muted">
-            <span><strong class="text-dark">{{ active_session_count }}</strong> active</span>
-            <span><strong class="text-dark">{{ closed_session_count }}</strong> closed</span>
-        </div>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-bordered align-top mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for week in calendar_weeks %}
-                    <tr>
-                        {% for day in week %}
-                            <td class="{% if not day.in_month %}bg-light text-muted{% endif %}" style="width:14%; min-width:150px; height:150px;">
-                                <div class="small fw-semibold mb-2">{{ day.date|date:"M j" }}</div>
-                                {% for request_item in day.requests %}
-                                    <div class="badge {% if request_item.status == 'approved' %}text-bg-success{% else %}text-bg-warning{% endif %} text-wrap mb-1 d-block">
-                                        {{ request_item.get_status_display }} request: {{ request_item.student.full_name|default:request_item.submitted_by_name }}
-                                    </div>
-                                {% endfor %}
-                                {% for session in day.sessions %}
-                                    <div class="small border rounded p-1 mb-1">
-                                        <div class="fw-semibold">{{ session.start_at|date:"g:i A" }}</div>
-                                        <div>{{ session.student.full_name }}</div>
-                                        <div class="text-muted">{{ session.get_status_display }}</div>
-                                    </div>
-                                {% endfor %}
-                            </td>
-                        {% endfor %}
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-<div class="card shadow-sm mb-4">
-    <div class="card-header bg-white"><h2 class="h5 mb-0">Pending counselling requests</h2></div>
-    <div class="table-responsive">
-        <table class="table align-middle mb-0">
-            <thead><tr><th>Student</th><th>Requested date</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-                {% for item in pending_counselling_requests %}
-                    <tr>
-                        <td>{% if item.student %}<a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>{% else %}{{ item.submitted_by_name }}{% endif %}</td>
-                        <td>{{ item.preferred_date|default:"-" }}{% if item.preferred_time %}<div class="small text-muted">{{ item.preferred_time }}</div>{% endif %}</td>
-                        <td>{{ item.get_status_display }}</td>
-                        <td class="text-end">
-                            <a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Review</a>
-                            <a class="btn btn-sm btn-primary" href="{% url 'session_create' %}?request={{ item.pk }}">Book slot</a>
-                        </td>
-                    </tr>
-                {% empty %}
-                    <tr><td colspan="4" class="text-center text-muted py-4">No pending counselling requests.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-{% endif %}
-<div class="card shadow-sm">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3 flex-wrap">
+<section class="ops-shell">
+    <section class="ops-hero is-soft">
         <div>
-            <h2 class="h5 mb-1">{% if current_scope == "history" %}Closed session history{% else %}Active sessions{% endif %}</h2>
-            <p class="text-muted small mb-0">{% if current_scope == "history" %}Past or archived sessions stay here for reference after follow-up is complete.{% else %}Keep current and upcoming sessions here so the timetable stays focused.{% endif %}</p>
+            <span class="ops-eyebrow">Session Timetable</span>
+            <h1 class="ops-hero-title">Keep counselling sessions organized, current, and easy to scan.</h1>
+            <p class="ops-hero-copy">Approve requests, book slots, send reminders, and move finished sessions out of the live timetable once follow-up is complete.</p>
         </div>
-        {% if current_scope == "history" %}
-            <a class="btn btn-sm btn-outline-primary" href="{% url 'session_list' %}">View active timetable</a>
-        {% else %}
-            <a class="btn btn-sm btn-outline-secondary" href="{% url 'session_list' %}?scope=history">View closed history</a>
-        {% endif %}
-    </div>
-    <div class="table-responsive">
-        <table class="table align-middle mb-0">
-            <thead><tr><th>Student</th><th>Slot</th><th>Counsellor</th><th>Type</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-                {% for session in sessions %}
-                    <tr>
-                        <td><a href="{{ session.student.get_absolute_url }}">{{ session.student.full_name }}</a></td>
-                        <td>
-                            {{ session.start_at|date:"M j, Y g:i A" }}<div class="small text-muted">{{ session.end_at|date:"g:i A" }}</div>
-                            {% if current_scope == "history" and session.closed_at %}
-                                <div class="small text-muted">Closed {{ session.closed_at|date:"M j, Y g:i A" }}</div>
-                            {% endif %}
-                        </td>
-                        <td>{{ session.counsellor.get_full_name|default:"Unassigned" }}</td>
-                        <td>{{ session.get_session_type_display }}</td>
-                        <td>{{ session.get_status_display }}</td>
-                        <td class="text-end">
-                            <form method="post">
-                                {% csrf_token %}
-                                <input type="hidden" name="session_id" value="{{ session.id }}">
-                                {% if current_scope == 'history' %}
-                                    <input type="hidden" name="action" value="reopen">
-                                    <button class="btn btn-sm btn-outline-secondary" type="submit">Reopen</button>
-                                {% else %}
-                                    <button class="btn btn-sm btn-outline-primary" type="submit">Send reminder</button>
-                                    <button class="btn btn-sm btn-outline-dark" type="submit" name="action" value="close">Close</button>
-                                {% endif %}
-                            </form>
-                        </td>
-                    </tr>
-                {% empty %}
-                    <tr><td colspan="6" class="text-center text-muted py-5">{% if current_scope == "history" %}No closed sessions yet.{% else %}No sessions scheduled yet.{% endif %}</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
+        <div class="ops-hero-actions">
+            <a class="btn btn-light" href="{% url 'session_create' %}">Book Session</a>
+            <div class="ops-pill-group">
+                <span class="ops-pill">Active sessions: {{ active_session_count }}</span>
+                <span class="ops-pill">History: {{ closed_session_count }}</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="ops-filter-card">
+        <form method="get" class="row g-3">
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label">Status</label>
+                <select class="form-select" name="status">
+                    <option value="">All</option>
+                    {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label">Type</label>
+                <select class="form-select" name="session_type">
+                    <option value="">All</option>
+                    {% for value, label in type_choices %}
+                        <option value="{{ value }}" {% if request.GET.session_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label">Section</label>
+                <select class="form-select" name="scope">
+                    <option value="active" {% if current_scope == 'active' %}selected{% endif %}>Active timetable</option>
+                    <option value="history" {% if current_scope == 'history' %}selected{% endif %}>Closed history</option>
+                </select>
+            </div>
+            <div class="col-lg-3 col-md-6 d-flex align-items-end gap-2">
+                <button class="btn btn-primary" type="submit">Apply</button>
+                <a class="btn btn-outline-secondary" href="{% url 'session_list' %}">Reset</a>
+            </div>
+        </form>
+    </section>
+
+    {% if current_scope != "history" %}
+        <section class="ops-note mb-4">
+            <strong>Workflow tip:</strong> approve counselling requests from the request queue, then book the session here. Approved requests stay visible below until a slot is booked.
+        </section>
+
+        <div class="ops-grid-two mb-4">
+            <section class="ops-section-card">
+                <div class="ops-section-head">
+                    <div>
+                        <h2 class="ops-section-title">Calendar view</h2>
+                        <p class="ops-section-copy">See request demand and booked sessions in the same monthly view.</p>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <a class="btn btn-sm btn-outline-secondary" href="?year={{ prev_month.0 }}&month={{ prev_month.1 }}">Previous</a>
+                        <span class="fw-semibold">{{ calendar_month|date:"F Y" }}</span>
+                        <a class="btn btn-sm btn-outline-secondary" href="?year={{ next_month.0 }}&month={{ next_month.1 }}">Next</a>
+                    </div>
+                </div>
+                <div class="ops-calendar-shell premium-table">
+                    <div class="table-responsive">
+                        <table class="table table-bordered align-top">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for week in calendar_weeks %}
+                                    <tr>
+                                        {% for day in week %}
+                                            <td class="{% if not day.in_month %}bg-light text-muted{% endif %}" style="width:14%; min-width:150px; height:160px;">
+                                                <div class="small fw-semibold mb-2">{{ day.date|date:"M j" }}</div>
+                                                {% for request_item in day.requests %}
+                                                    <div class="ops-calendar-chip {% if request_item.status == 'approved' %}text-bg-success{% endif %}">
+                                                        {{ request_item.get_status_display }} request: {{ request_item.student.full_name|default:request_item.submitted_by_name }}
+                                                    </div>
+                                                {% endfor %}
+                                                {% for session in day.sessions %}
+                                                    <div class="ops-calendar-item">
+                                                        <div class="fw-semibold">{{ session.start_at|date:"g:i A" }}</div>
+                                                        <div>{{ session.student.full_name }}</div>
+                                                        <div class="text-muted">{{ session.get_status_display }}</div>
+                                                    </div>
+                                                {% endfor %}
+                                            </td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section class="ops-section-card">
+                <div class="ops-section-head borderless">
+                    <div>
+                        <h2 class="ops-section-title">Pending counselling requests</h2>
+                        <p class="ops-section-copy">These still need a booked slot or a final staff decision.</p>
+                    </div>
+                </div>
+                <div class="ops-section-body">
+                    <div class="ops-list">
+                        {% for item in pending_counselling_requests %}
+                            <div class="ops-list-item">
+                                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                                    <div>
+                                        <div class="ops-list-title">{% if item.student %}{{ item.student.full_name }}{% else %}{{ item.submitted_by_name }}{% endif %}</div>
+                                        <div class="ops-list-meta">{{ item.get_status_display }}{% if item.preferred_date %} | {{ item.preferred_date }}{% endif %}{% if item.preferred_time %} | {{ item.preferred_time }}{% endif %}</div>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Review</a>
+                                        <a class="btn btn-sm btn-primary" href="{% url 'session_create' %}?request={{ item.pk }}">Book slot</a>
+                                    </div>
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="empty-state-panel">
+                                <div class="empty-state-title">No pending counselling requests</div>
+                                <div class="empty-state-copy">Approved requests will appear here until a slot is booked.</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </section>
+        </div>
+    {% endif %}
+
+    <section class="ops-section-card">
+        <div class="ops-section-head">
+            <div>
+                <h2 class="ops-section-title">{% if current_scope == "history" %}Closed session history{% else %}Active sessions{% endif %}</h2>
+                <p class="ops-section-copy">{% if current_scope == "history" %}Use this area for past or archived sessions once they no longer need space in the live timetable.{% else %}Keep current and upcoming sessions here so staff can quickly scan the live schedule.{% endif %}</p>
+            </div>
+            <div class="ops-history-toggle">
+                <a class="btn btn-sm {% if current_scope == 'active' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{% url 'session_list' %}">Active</a>
+                <a class="btn btn-sm {% if current_scope == 'history' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'session_list' %}?scope=history">History</a>
+            </div>
+        </div>
+        <div class="ops-table-wrap premium-table">
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Slot</th>
+                            <th>Counsellor</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for session in sessions %}
+                            <tr>
+                                <td><a href="{{ session.student.get_absolute_url }}">{{ session.student.full_name }}</a></td>
+                                <td>
+                                    {{ session.start_at|date:"M j, Y g:i A" }}
+                                    <div class="small text-muted">{{ session.end_at|date:"g:i A" }}</div>
+                                    {% if current_scope == "history" and session.closed_at %}
+                                        <div class="small text-muted">Closed {{ session.closed_at|date:"M j, Y g:i A" }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>{{ session.counsellor.get_full_name|default:"Unassigned" }}</td>
+                                <td>{{ session.get_session_type_display }}</td>
+                                <td>{{ session.get_status_display }}</td>
+                                <td class="text-end">
+                                    <form method="post" class="d-flex justify-content-end gap-2 flex-wrap">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="session_id" value="{{ session.id }}">
+                                        {% if current_scope == 'history' %}
+                                            <input type="hidden" name="action" value="reopen">
+                                            <button class="btn btn-sm btn-outline-secondary" type="submit">Reopen</button>
+                                        {% else %}
+                                            <button class="btn btn-sm btn-outline-primary" type="submit">Send reminder</button>
+                                            <button class="btn btn-sm btn-outline-dark" type="submit" name="action" value="close">Close</button>
+                                        {% endif %}
+                                    </form>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="6" class="text-center text-muted py-5">{% if current_scope == "history" %}No closed sessions yet.{% else %}No sessions scheduled yet.{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</section>
 {% endblock %}

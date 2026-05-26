@@ -1,83 +1,81 @@
 {% extends "base.html" %}
 {% block title %}Reports | UIS Student Record System{% endblock %}
 {% block content %}
-<div class="mb-4">
-    <h1 class="h3 mb-1">Reports</h1>
-    <p class="text-muted mb-0">Management-ready summaries plus a report workspace for parents and agents.</p>
-</div>
-<div class="row g-4 mb-4">
-    <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">Weekly management summary</h2></div>
-            <div class="card-body">
-                <ul class="list-unstyled mb-0">
-                    <li class="mb-2">New students this week: <strong>{{ weekly_summary.new_students }}</strong></li>
-                    <li class="mb-2">Updated student records: <strong>{{ weekly_summary.updated_students }}</strong></li>
-                    <li class="mb-2">Completed tasks: <strong>{{ weekly_summary.completed_tasks }}</strong></li>
-                    <li>Urgent-risk students: <strong>{{ weekly_summary.urgent_students }}</strong></li>
-                </ul>
+<section class="ops-shell">
+    <section class="ops-hero is-soft">
+        <div>
+            <span class="ops-eyebrow">Reporting Workspace</span>
+            <h1 class="ops-hero-title">Prepare polished school updates without losing sight of the wider caseload.</h1>
+            <p class="ops-hero-copy">Build parent and agent reports, track what has been sent, and keep leadership summaries visible in the same workspace.</p>
+        </div>
+        <div class="ops-hero-actions">
+            <div class="ops-pill-group">
+                <span class="ops-pill">Active reports: {{ active_report_count }}</span>
+                <span class="ops-pill">History: {{ closed_report_count }}</span>
             </div>
         </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">Counsellor activity summary</h2></div>
-            <div class="table-responsive">
-                <table class="table mb-0">
-                    <thead><tr><th>Counsellor</th><th>Assigned students</th><th>Open tasks</th></tr></thead>
-                    <tbody>
-                        {% for user in counsellor_activity %}
-                            <tr><td>{{ user.get_full_name|default:user.username }}</td><td>{{ user.student_total }}</td><td>{{ user.open_tasks }}</td></tr>
-                        {% empty %}
-                            <tr><td colspan="3" class="text-center text-muted py-4">No counsellor data available.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    </section>
+
+    <section class="ops-stat-grid">
+        <div class="ops-stat-card"><div class="label">New Students</div><div class="value">{{ weekly_summary.new_students }}</div></div>
+        <div class="ops-stat-card"><div class="label">Updated Records</div><div class="value">{{ weekly_summary.updated_students }}</div></div>
+        <div class="ops-stat-card"><div class="label">Completed Tasks</div><div class="value">{{ weekly_summary.completed_tasks }}</div></div>
+        <div class="ops-stat-card"><div class="label">Urgent Risk</div><div class="value">{{ weekly_summary.urgent_students }}</div></div>
+        <div class="ops-stat-card"><div class="label">Active Reports</div><div class="value">{{ active_report_count }}</div></div>
+        <div class="ops-stat-card"><div class="label">Closed Reports</div><div class="value">{{ closed_report_count }}</div></div>
+    </section>
+
+    <div class="ops-grid-split mb-4">
+        <section class="ops-section-card">
+            <div class="ops-section-head borderless">
+                <div>
+                    <h2 class="ops-section-title">Weekly management summary</h2>
+                    <p class="ops-section-copy">A quick view of what changed across student support work this week.</p>
+                </div>
             </div>
-        </div>
-    </div>
-</div>
-<div class="row g-4">
-    <div class="col-lg-7">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">Student case summary</h2></div>
-            <div class="table-responsive">
-                <table class="table mb-0">
-                    <thead><tr><th>Student</th><th>Counsellor</th><th>Application</th><th>Risk</th><th>Updated</th></tr></thead>
-                    <tbody>
-                        {% for student in student_case_summary %}
-                            <tr><td><a href="{{ student.get_absolute_url }}">{{ student.full_name }}</a></td><td>{{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</td><td>{{ student.get_university_application_status_display }}</td><td>{{ student.get_overall_risk_level_display }}</td><td>{{ student.updated_at|date:"M j, Y" }}</td></tr>
-                        {% empty %}
-                            <tr><td colspan="5" class="text-center text-muted py-4">No case data available.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="ops-section-body">
+                <div class="ops-summary-list">
+                    <div class="ops-summary-row"><span class="ops-summary-label">New students this week</span><span class="ops-summary-value">{{ weekly_summary.new_students }}</span></div>
+                    <div class="ops-summary-row"><span class="ops-summary-label">Updated student records</span><span class="ops-summary-value">{{ weekly_summary.updated_students }}</span></div>
+                    <div class="ops-summary-row"><span class="ops-summary-label">Completed tasks</span><span class="ops-summary-value">{{ weekly_summary.completed_tasks }}</span></div>
+                    <div class="ops-summary-row"><span class="ops-summary-label">Urgent-risk students</span><span class="ops-summary-value">{{ weekly_summary.urgent_students }}</span></div>
+                </div>
             </div>
-        </div>
-    </div>
-    <div class="col-lg-5">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">Overdue follow-up report</h2></div>
-            <div class="list-group list-group-flush">
-                {% for task in overdue_tasks %}
-                    <div class="list-group-item">
-                        <div class="fw-semibold">{{ task.title }}</div>
-                        <div><a href="{{ task.student.get_absolute_url }}">{{ task.student.full_name }}</a></div>
-                        <div class="small text-muted">Due {{ task.due_date }} | {{ task.get_priority_display }}</div>
-                    </div>
-                {% empty %}
-                    <div class="list-group-item text-muted">No overdue tasks.</div>
-                {% endfor %}
+        </section>
+
+        <section class="ops-section-card">
+            <div class="ops-section-head borderless">
+                <div>
+                    <h2 class="ops-section-title">Counsellor activity</h2>
+                    <p class="ops-section-copy">A light workload snapshot for assigned students and open follow-up.</p>
+                </div>
             </div>
-        </div>
+            <div class="ops-table-wrap premium-table">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead><tr><th>Counsellor</th><th>Assigned students</th><th>Open tasks</th></tr></thead>
+                        <tbody>
+                            {% for user in counsellor_activity %}
+                                <tr><td>{{ user.get_full_name|default:user.username }}</td><td>{{ user.student_total }}</td><td>{{ user.open_tasks }}</td></tr>
+                            {% empty %}
+                                <tr><td colspan="3" class="text-center text-muted py-4">No counsellor data available.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
     </div>
-</div>
-<div class="row g-4 mt-1">
-    <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">Prepare parent or agent report</h2></div>
-            <div class="card-body">
-                <p class="text-muted small">Use this for polished updates to parents, guardians, or agents. You can save a report draft first, then queue the email after review.</p>
+
+    <div class="ops-report-layout mb-4">
+        <section class="ops-section-card">
+            <div class="ops-section-head borderless">
+                <div>
+                    <h2 class="ops-section-title">Prepare parent or agent report</h2>
+                    <p class="ops-section-copy">Use this workspace for polished updates that can be saved first, reviewed, and then queued for delivery.</p>
+                </div>
+            </div>
+            <div class="ops-section-body">
                 <form method="post" enctype="multipart/form-data">
                     {% csrf_token %}
                     <div class="row g-3">
@@ -89,80 +87,130 @@
                             </div>
                         {% endfor %}
                     </div>
-                    <div class="mt-3 d-flex gap-2">
+                    <div class="ops-report-actions mt-3">
                         <button class="btn btn-primary" type="submit">Save report</button>
                         <button class="btn btn-outline-primary" type="submit" name="send_report" value="1">Save and queue email</button>
                     </div>
                 </form>
             </div>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3 flex-wrap">
+        </section>
+
+        <section class="ops-section-card">
+            <div class="ops-section-head">
                 <div>
-                    <h2 class="h5 mb-1">{% if current_scope == "history" %}Closed report history{% else %}Prepared reports{% endif %}</h2>
-                    <p class="text-muted small mb-0">{% if current_scope == "history" %}Archived reports remain available here for future reference.{% else %}Use the active workspace for reports that still need editing, sending, or review.{% endif %}</p>
+                    <h2 class="ops-section-title">{% if current_scope == "history" %}Closed report history{% else %}Prepared reports{% endif %}</h2>
+                    <p class="ops-section-copy">{% if current_scope == "history" %}Archived reports remain here for future reference and easy retrieval.{% else %}Keep active drafts and send-ready reports here while they still need attention.{% endif %}</p>
                 </div>
-                <div class="d-flex gap-2">
+                <div class="ops-history-toggle">
                     <a class="btn btn-sm {% if current_scope == 'active' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{% url 'reports' %}">Active</a>
                     <a class="btn btn-sm {% if current_scope == 'history' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'reports' %}?scope=history">History</a>
                 </div>
             </div>
-            <div class="card-body border-bottom bg-light-subtle">
-                <div class="row g-3">
-                    <div class="col-sm-6"><div class="fw-semibold">{{ active_report_count }}</div><div class="small text-muted">Active reports</div></div>
-                    <div class="col-sm-6"><div class="fw-semibold">{{ closed_report_count }}</div><div class="small text-muted">Closed reports</div></div>
-                </div>
-            </div>
-            <div class="list-group list-group-flush">
-                {% for item in prepared_reports %}
-                    <div class="list-group-item">
-                        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-                            <div>
-                                <div class="fw-semibold">{{ item.title }}</div>
-                                <div><a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>{% if item.term %} | {{ item.term }}{% endif %}</div>
-                                <div class="small text-muted">
-                                    {{ item.get_audience_display }}{% if item.recipient_email %} | {{ item.recipient_email }}{% endif %}
-                                    {% if item.sent_at %}
-                                        | Sent {{ item.sent_at|date:"M j, Y g:i A" }}
-                                    {% elif item.send_requested_at %}
-                                        | Queued {{ item.send_requested_at|date:"M j, Y g:i A" }}
-                                    {% else %}
-                                        | Saved draft
-                                    {% endif %}
-                                    {% if item.closed_at %}
-                                        | Closed {{ item.closed_at|date:"M j, Y g:i A" }}
-                                    {% endif %}
+            <div class="ops-section-body">
+                <div class="ops-list">
+                    {% for item in prepared_reports %}
+                        <div class="ops-list-item">
+                            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                                <div>
+                                    <div class="ops-list-title">{{ item.title }}</div>
+                                    <div class="ops-list-meta">
+                                        <a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>{% if item.term %} | {{ item.term }}{% endif %}
+                                    </div>
+                                    <div class="ops-list-meta">
+                                        {{ item.get_audience_display }}{% if item.recipient_email %} | {{ item.recipient_email }}{% endif %}
+                                        {% if item.sent_at %}
+                                            | Sent {{ item.sent_at|date:"M j, Y g:i A" }}
+                                        {% elif item.send_requested_at %}
+                                            | Queued {{ item.send_requested_at|date:"M j, Y g:i A" }}
+                                        {% else %}
+                                            | Saved draft
+                                        {% endif %}
+                                        {% if item.closed_at %}
+                                            | Closed {{ item.closed_at|date:"M j, Y g:i A" }}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_update' item.pk %}">Open report</a>
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="report_id" value="{{ item.pk }}">
+                                        {% if current_scope == 'history' %}
+                                            <input type="hidden" name="report_action" value="reopen">
+                                            <button class="btn btn-sm btn-outline-secondary" type="submit">Reopen</button>
+                                        {% else %}
+                                            <input type="hidden" name="report_action" value="close">
+                                            <button class="btn btn-sm btn-outline-dark" type="submit">Close</button>
+                                        {% endif %}
+                                    </form>
                                 </div>
                             </div>
-                            <div class="d-flex gap-2 flex-wrap">
-                                <a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_update' item.pk %}">Open report</a>
-                                <form method="post">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="report_id" value="{{ item.pk }}">
-                                    {% if current_scope == 'history' %}
-                                        <input type="hidden" name="report_action" value="reopen">
-                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Reopen</button>
-                                    {% else %}
-                                        <input type="hidden" name="report_action" value="close">
-                                        <button class="btn btn-sm btn-outline-dark" type="submit">Close</button>
-                                    {% endif %}
-                                </form>
-                            </div>
+                            {% if item.send_error %}
+                                <div class="small text-danger mt-2">{{ item.send_error }}</div>
+                            {% endif %}
+                            {% if item.attachment %}
+                                <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{{ item.attachment.url }}" target="_blank">Open attached file</a></div>
+                            {% endif %}
                         </div>
-                        {% if item.send_error %}
-                            <div class="small text-danger mt-1">{{ item.send_error }}</div>
-                        {% endif %}
-                        {% if item.attachment %}
-                            <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{{ item.attachment.url }}" target="_blank">Open attached file</a></div>
-                        {% endif %}
-                    </div>
-                {% empty %}
-                    <div class="list-group-item text-muted">{% if current_scope == "history" %}No closed reports yet.{% else %}No active prepared reports yet.{% endif %}</div>
-                {% endfor %}
+                    {% empty %}
+                        <div class="empty-state-panel">
+                            <div class="empty-state-title">{% if current_scope == "history" %}No closed reports yet{% else %}No active prepared reports yet{% endif %}</div>
+                            <div class="empty-state-copy">{% if current_scope == "history" %}Closed reports will appear here once they are moved out of the active workspace.{% else %}Save a report draft to begin building your report history.{% endif %}</div>
+                        </div>
+                    {% endfor %}
+                </div>
             </div>
-        </div>
+        </section>
     </div>
-</div>
+
+    <div class="ops-grid-two">
+        <section class="ops-section-card">
+            <div class="ops-section-head borderless">
+                <div>
+                    <h2 class="ops-section-title">Student case summary</h2>
+                    <p class="ops-section-copy">Recent student records with application and risk context.</p>
+                </div>
+            </div>
+            <div class="ops-table-wrap premium-table">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead><tr><th>Student</th><th>Counsellor</th><th>Application</th><th>Risk</th><th>Updated</th></tr></thead>
+                        <tbody>
+                            {% for student in student_case_summary %}
+                                <tr><td><a href="{{ student.get_absolute_url }}">{{ student.full_name }}</a></td><td>{{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</td><td>{{ student.get_university_application_status_display }}</td><td>{{ student.get_overall_risk_level_display }}</td><td>{{ student.updated_at|date:"M j, Y" }}</td></tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="text-center text-muted py-4">No case data available.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="ops-section-card">
+            <div class="ops-section-head borderless">
+                <div>
+                    <h2 class="ops-section-title">Overdue follow-up</h2>
+                    <p class="ops-section-copy">Tasks that still need attention from the student support team.</p>
+                </div>
+            </div>
+            <div class="ops-section-body">
+                <div class="ops-list">
+                    {% for task in overdue_tasks %}
+                        <div class="ops-list-item">
+                            <div class="ops-list-title">{{ task.title }}</div>
+                            <div class="ops-list-meta"><a href="{{ task.student.get_absolute_url }}">{{ task.student.full_name }}</a></div>
+                            <div class="ops-list-meta">Due {{ task.due_date }} | {{ task.get_priority_display }}</div>
+                        </div>
+                    {% empty %}
+                        <div class="empty-state-panel compact">
+                            <div class="empty-state-title">No overdue tasks</div>
+                            <div class="empty-state-copy">The team is currently caught up on overdue follow-up.</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    </div>
+</section>
 {% endblock %}
