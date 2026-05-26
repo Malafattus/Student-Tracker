@@ -1,70 +1,135 @@
 {% extends "base.html" %}
 {% block title %}My Portal | UIS Student Record System{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-    <div>
-        <h1 class="h3 mb-1">My Student Portal</h1>
-        <p class="text-muted mb-0">{{ student.full_name }} | {{ student.student_id }} | Grade {{ student.grade }}</p>
+<section class="hero-shell mb-4">
+    <div class="hero-panel portal-hero">
+        <div>
+            <span class="eyebrow">Student Portal</span>
+            <h1 class="display-title mb-2">Welcome back, {{ student.full_name }}.</h1>
+            <p class="hero-copy mb-0">Track your requests, watch for school updates, and keep an eye on your next important steps in one place.</p>
+        </div>
+        <div class="hero-actions">
+            <div class="hero-meta-chip">{{ student.student_id }}</div>
+            <div class="hero-meta-chip">Grade {{ student.grade }}</div>
+            <a class="btn btn-primary premium-btn" href="{% url 'portal_request_create' %}">Submit New Request</a>
+        </div>
     </div>
-    <a class="btn btn-primary" href="{% url 'portal_request_create' %}">Submit New Request</a>
+</section>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-8">
+        <div class="card shadow-sm premium-card h-100">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">What to do next</span>
+                <h2 class="section-title mb-1">Your checklist for this week</h2>
+                <p class="section-subtitle mb-0">A quick guide to help you stay on top of requests, documents, and school follow-up.</p>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for step in student_next_steps %}
+                        <div class="col-md-4">
+                            <div class="next-step-card {% if step.done %}is-done{% endif %}">
+                                <div class="next-step-status">{% if step.done %}Done{% else %}Next{% endif %}</div>
+                                <h3>{{ step.title }}</h3>
+                                <p class="mb-0">{{ step.body }}</p>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="card shadow-sm premium-card h-100">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">At a glance</span>
+                <h2 class="section-title mb-1">Your current status</h2>
+            </div>
+            <div class="card-body">
+                <div class="mini-stat-grid mb-4">
+                    <div class="mini-stat-card">
+                        <div class="mini-stat-label">Open requests</div>
+                        <div class="mini-stat-value">{{ requests|length }}</div>
+                    </div>
+                    <div class="mini-stat-card">
+                        <div class="mini-stat-label">Booked sessions</div>
+                        <div class="mini-stat-value">{{ sessions|length }}</div>
+                    </div>
+                    <div class="mini-stat-card">
+                        <div class="mini-stat-label">Missing documents</div>
+                        <div class="mini-stat-value">{{ missing_documents|length }}</div>
+                    </div>
+                </div>
+                {% if next_session %}
+                    <div class="status-panel mb-3">
+                        <div class="status-label">Next session</div>
+                        <div class="status-value">{{ next_session.start_at|date:"M j, Y g:i A" }}</div>
+                        <div class="status-detail">{{ next_session.get_session_type_display }} with {{ next_session.counsellor.get_full_name|default:"the counselling team" }}</div>
+                    </div>
+                {% endif %}
+                {% if open_request %}
+                    <div class="status-panel subtle">
+                        <div class="status-label">Latest open request</div>
+                        <div class="status-value">{{ open_request.title }}</div>
+                        <div class="status-detail">{{ open_request.get_request_type_display }} | {{ open_request.get_status_display }}</div>
+                    </div>
+                {% endif %}
+                {% if not next_session and not open_request %}
+                    <p class="text-muted mb-0">You do not have any upcoming sessions or active requests right now.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="row g-4 mb-4">
     <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">My Information</h2></div>
+        <div class="card shadow-sm premium-card h-100">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Profile</span>
+                <h2 class="section-title mb-0">My Information</h2>
+            </div>
             <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-6"><strong>Preferred language:</strong><br>{{ student.preferred_language|default:"Not set" }}</div>
-                    <div class="col-md-6"><strong>Nationality:</strong><br>{{ student.nationality }}</div>
-                    <div class="col-md-6"><strong>Assigned counsellor:</strong><br>{{ student.assigned_counsellor.get_full_name|default:"Not assigned yet" }}</div>
-                    <div class="col-md-6"><strong>Agency:</strong><br>{{ student.agency|default:"Not set" }}</div>
-                    <div class="col-md-6"><strong>Academic status:</strong><br>{{ student.get_academic_status_display }}</div>
-                    <div class="col-md-6"><strong>Application status:</strong><br>{{ student.get_university_application_status_display }}</div>
-                    <div class="col-md-6"><strong>Payment status:</strong><br>{{ student.get_payment_status_display }}</div>
-                    <div class="col-md-6"><strong>Homestay status:</strong><br>{{ student.get_homestay_status_display }}</div>
+                <div class="info-grid">
+                    <div><span class="info-label">Preferred language</span><span class="info-value">{{ student.preferred_language|default:"Not set" }}</span></div>
+                    <div><span class="info-label">Nationality</span><span class="info-value">{{ student.nationality }}</span></div>
+                    <div><span class="info-label">Assigned counsellor</span><span class="info-value">{{ student.assigned_counsellor.get_full_name|default:"Not assigned yet" }}</span></div>
+                    <div><span class="info-label">Agency</span><span class="info-value">{{ student.agency|default:"Not set" }}</span></div>
+                    <div><span class="info-label">Academic status</span><span class="info-value">{{ student.get_academic_status_display }}</span></div>
+                    <div><span class="info-label">Application status</span><span class="info-value">{{ student.get_university_application_status_display }}</span></div>
+                    <div><span class="info-label">Payment status</span><span class="info-value">{{ student.get_payment_status_display }}</span></div>
+                    <div><span class="info-label">Homestay status</span><span class="info-value">{{ student.get_homestay_status_display }}</span></div>
                 </div>
                 {% if student.internal_summary %}
-                    <hr>
-                    <h3 class="h6">Current Summary</h3>
+                    <div class="soft-divider"></div>
+                    <span class="info-label d-block mb-2">Current summary</span>
                     <p class="mb-0">{{ student.internal_summary|linebreaksbr }}</p>
                 {% endif %}
             </div>
         </div>
     </div>
     <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">Important Checklist</h2></div>
+        <div class="card shadow-sm premium-card h-100">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Checklist</span>
+                <h2 class="section-title mb-0">Important documents</h2>
+            </div>
             <div class="card-body">
-                <div class="row g-3 mb-3">
-                    <div class="col-sm-4">
-                        <div class="border rounded p-3 h-100">
-                            <div class="small text-muted">Open requests</div>
-                            <div class="fs-3 fw-semibold">{{ requests|length }}</div>
-                        </div>
-                    </div>
-                    <div class="col-sm-4">
-                        <div class="border rounded p-3 h-100">
-                            <div class="small text-muted">Booked sessions</div>
-                            <div class="fs-3 fw-semibold">{{ sessions|length }}</div>
-                        </div>
-                    </div>
-                    <div class="col-sm-4">
-                        <div class="border rounded p-3 h-100">
-                            <div class="small text-muted">Missing documents</div>
-                            <div class="fs-3 fw-semibold">{{ missing_documents|length }}</div>
-                        </div>
-                    </div>
-                </div>
                 {% if missing_documents %}
-                    <h3 class="h6">Missing documents</h3>
-                    <ul class="mb-0">
+                    <div class="callout-warning mb-3">The school is still waiting for the items below.</div>
+                    <div class="stacked-list">
                         {% for document in missing_documents %}
-                            <li>{{ document.document_name }}{% if document.due_date %} (due {{ document.due_date }}){% endif %}</li>
+                            <div class="stacked-list-item">
+                                <div class="fw-semibold">{{ document.document_name }}</div>
+                                <div class="small text-muted">{% if document.due_date %}Due {{ document.due_date }}{% else %}No due date set yet{% endif %}</div>
+                            </div>
                         {% endfor %}
-                    </ul>
+                    </div>
                 {% else %}
-                    <p class="text-muted mb-0">No missing documents are listed right now.</p>
+                    <div class="empty-state-panel">
+                        <div class="empty-state-title">All clear for now</div>
+                        <div class="empty-state-copy">No missing documents are listed on your record right now.</div>
+                    </div>
                 {% endif %}
             </div>
         </div>
@@ -73,16 +138,23 @@
 
 <div class="row g-4">
     <div class="col-xl-7">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">My Requests</h2></div>
-            <div class="table-responsive">
+        <div class="card shadow-sm premium-card mb-4">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Requests</span>
+                <h2 class="section-title mb-1">My Requests</h2>
+                <p class="section-subtitle mb-0">See what you asked for, where it stands, and whether the school has emailed you an update.</p>
+            </div>
+            <div class="table-responsive premium-table">
                 <table class="table mb-0">
                     <thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Files</th><th>Email Updates</th><th>Submitted</th></tr></thead>
                     <tbody>
                         {% for item in requests %}
                             <tr>
                                 <td>{{ item.get_request_type_display }}</td>
-                                <td>{{ item.title }}</td>
+                                <td>
+                                    <div class="fw-semibold">{{ item.title }}</div>
+                                    <div class="small text-muted">{{ item.details|truncatechars:90 }}</div>
+                                </td>
                                 <td>
                                     <span class="badge {% if item.status == 'new' %}text-bg-warning{% elif item.status == 'approved' %}text-bg-success{% elif item.status == 'declined' %}text-bg-danger{% elif item.status == 'completed' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
                                         {{ item.get_status_display }}
@@ -114,23 +186,29 @@
             </div>
         </div>
 
-        <div class="card shadow-sm">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">My Term History</h2></div>
+        <div class="card shadow-sm premium-card">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Academics</span>
+                <h2 class="section-title mb-1">My Term History</h2>
+                <p class="section-subtitle mb-0">A term-by-term view of your school updates and course information.</p>
+            </div>
             <div class="card-body">
                 {% for record in term_records %}
-                    <div class="border rounded p-3 mb-3">
-                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                    <div class="timeline-card">
+                        <div class="timeline-head">
                             <div>
-                                <h3 class="h6 mb-1">{{ record.term }}</h3>
+                                <h3 class="timeline-title">{{ record.term }}</h3>
                                 {% if record.term.start_date and record.term.end_date %}
                                     <div class="small text-muted">{{ record.term.start_date }} to {{ record.term.end_date }}</div>
                                 {% endif %}
                             </div>
                         </div>
-                        <p><strong>Academic:</strong> {{ record.academic_summary|default:"No academic summary yet." }}</p>
-                        <p><strong>Attendance:</strong> {{ record.attendance_summary|default:"No attendance update yet." }}</p>
-                        <p><strong>Counselling:</strong> {{ record.counselling_summary|default:"No counselling update yet." }}</p>
-                        <div class="table-responsive">
+                        <div class="timeline-copy">
+                            <p><strong>Academic:</strong> {{ record.academic_summary|default:"No academic summary yet." }}</p>
+                            <p><strong>Attendance:</strong> {{ record.attendance_summary|default:"No attendance update yet." }}</p>
+                            <p><strong>Counselling:</strong> {{ record.counselling_summary|default:"No counselling update yet." }}</p>
+                        </div>
+                        <div class="table-responsive premium-table compact-table">
                             <table class="table table-sm mb-0">
                                 <thead><tr><th>Course</th><th>Code</th><th>Teacher</th><th>Mark</th></tr></thead>
                                 <tbody>
@@ -149,16 +227,23 @@
                         </div>
                     </div>
                 {% empty %}
-                    <p class="text-muted mb-0">No term history has been shared yet.</p>
+                    <div class="empty-state-panel">
+                        <div class="empty-state-title">No term history yet</div>
+                        <div class="empty-state-copy">Your school team has not shared any term updates yet.</div>
+                    </div>
                 {% endfor %}
             </div>
         </div>
     </div>
 
     <div class="col-xl-5">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">My Sessions</h2></div>
-            <div class="table-responsive">
+        <div class="card shadow-sm premium-card">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Sessions</span>
+                <h2 class="section-title mb-1">My Sessions</h2>
+                <p class="section-subtitle mb-0">Keep track of booked appointments and request a change if your time no longer works.</p>
+            </div>
+            <div class="table-responsive premium-table">
                 <table class="table mb-0">
                     <thead><tr><th>When</th><th>Type</th><th>Status</th><th></th></tr></thead>
                     <tbody>
@@ -167,7 +252,7 @@
                                 <td>{{ session.start_at|date:"M j, Y g:i A" }}</td>
                                 <td>{{ session.get_session_type_display }}</td>
                                 <td>{{ session.get_status_display }}</td>
-                                <td><a class="btn btn-sm btn-outline-primary" href="{% url 'session_reschedule' session.reschedule_token %}">Request change</a></td>
+                                <td><a class="btn btn-sm btn-outline-primary premium-btn-outline" href="{% url 'session_reschedule' session.reschedule_token %}">Request change</a></td>
                             </tr>
                         {% empty %}
                             <tr><td colspan="4" class="text-center text-muted py-4">No sessions booked yet.</td></tr>

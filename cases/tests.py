@@ -101,7 +101,7 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertRedirects(response, reverse("portal_dashboard"))
         portal_response = self.client.get(reverse("portal_dashboard"))
         self.assertEqual(portal_response.status_code, 200)
-        self.assertContains(portal_response, "My Student Portal")
+        self.assertContains(portal_response, "Welcome back, Test Student.")
         self.assertNotContains(portal_response, "Recent audit activity")
 
     def test_student_dashboard_route_redirects_into_portal(self):

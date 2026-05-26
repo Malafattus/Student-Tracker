@@ -1,29 +1,75 @@
 {% extends "base.html" %}
 {% block title %}New Request | UIS Student Record System{% endblock %}
 {% block content %}
+<section class="hero-shell mb-4">
+    <div class="hero-panel form-hero">
+        <div>
+            <span class="eyebrow">Student Support</span>
+            <h1 class="display-title mb-2">Submit a New Request</h1>
+            <p class="hero-copy mb-0">Ask for transcripts, counselling support, or other help from the school team. We’ll keep you updated once your request is reviewed.</p>
+        </div>
+        <div class="hero-actions">
+            <div class="hero-note">Choose the request type that best matches what you need.</div>
+        </div>
+    </div>
+</section>
+
 <div class="row justify-content-center">
-    <div class="col-lg-8">
-        <div class="card shadow-sm">
-            <div class="card-body p-4">
-                <h1 class="h3 mb-2">Submit a New Request</h1>
-                <p class="text-muted mb-4">Send a transcript request, counselling request, or another support request to the school team.</p>
-                <form method="post" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    <div class="row g-3">
-                        {% for field in form %}
-                            <div class="{% if field.name == 'details' or field.name == 'attachments' %}col-12{% else %}col-md-6{% endif %}">
-                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                                {{ field }}
-                                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-                                {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+    <div class="col-xl-10">
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="card shadow-sm premium-card">
+                    <div class="card-header bg-white border-0 pb-0">
+                        <span class="section-kicker">Request form</span>
+                        <h2 class="section-title mb-1">Tell us what you need</h2>
+                        <p class="section-subtitle mb-0">Add enough detail so the team can respond quickly and accurately.</p>
+                    </div>
+                    <div class="card-body">
+                        <form method="post" enctype="multipart/form-data">
+                            {% csrf_token %}
+                            <div class="row g-3">
+                                {% for field in form %}
+                                    <div class="{% if field.name == 'details' or field.name == 'attachments' %}col-12{% else %}col-md-6{% endif %}">
+                                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                        {{ field }}
+                                        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                                        {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                                    </div>
+                                {% endfor %}
                             </div>
-                        {% endfor %}
+                            <div class="mt-4 d-flex gap-2 flex-wrap">
+                                <button class="btn btn-primary premium-btn" type="submit">Send request</button>
+                                <a class="btn btn-outline-secondary premium-btn-outline" href="{% url 'portal_dashboard' %}">Back to my portal</a>
+                            </div>
+                        </form>
                     </div>
-                    <div class="mt-4 d-flex gap-2">
-                        <button class="btn btn-primary" type="submit">Send request</button>
-                        <a class="btn btn-outline-secondary" href="{% url 'portal_dashboard' %}">Back to my portal</a>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card shadow-sm premium-card h-100">
+                    <div class="card-header bg-white border-0 pb-0">
+                        <span class="section-kicker">Before you send</span>
+                        <h2 class="section-title mb-1">Helpful tips</h2>
                     </div>
-                </form>
+                    <div class="card-body">
+                        <div class="stacked-list">
+                            <div class="stacked-list-item">
+                                <div class="fw-semibold">Transcript request</div>
+                                <div class="small text-muted">Use this when you need an official or unofficial transcript for applications or records.</div>
+                            </div>
+                            <div class="stacked-list-item">
+                                <div class="fw-semibold">Counselling request</div>
+                                <div class="small text-muted">Use this if you want to meet with the counselling team or ask for academic support.</div>
+                            </div>
+                            <div class="stacked-list-item">
+                                <div class="fw-semibold">Document support</div>
+                                <div class="small text-muted">Upload screenshots or files if they help explain what you need.</div>
+                            </div>
+                        </div>
+                        <div class="soft-divider"></div>
+                        <p class="small text-muted mb-0">After you submit, the school team will review your request and send an update through the portal and email when needed.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

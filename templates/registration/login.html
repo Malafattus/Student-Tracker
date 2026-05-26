@@ -10,29 +10,47 @@
 <body class="login-page">
     <div class="container">
         <div class="row justify-content-center align-items-center min-vh-100">
-            <div class="col-md-5 col-lg-4">
-                <div class="card shadow-lg border-0">
-                    <div class="card-body p-4">
-        <h1 class="h3 mb-3 text-center">UIS Student Record System</h1>
-                        <p class="text-muted text-center">International counselling team workspace</p>
-                        <form method="post">
-                            {% csrf_token %}
-                            <div class="mb-3">
-                                <label class="form-label" for="id_username">Login ID</label>
-                                <input class="form-control" type="text" name="username" id="id_username" required>
-                                <div class="form-text">Use your username or email address.</div>
+            <div class="col-lg-10">
+                <div class="row g-4 align-items-stretch">
+                    <div class="col-lg-6">
+                        <div class="hero-panel h-100">
+                            <div>
+                                <span class="eyebrow">UIS Student Record System</span>
+                                <h1 class="display-title mb-3">A calmer place to manage student support.</h1>
+                                <p class="hero-copy">Built for counselling, student records, session planning, and school-family communication in one connected workspace.</p>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label" for="id_password">Password</label>
-                                <input class="form-control" type="password" name="password" id="id_password" required>
+                            <div class="stacked-list w-100">
+                                <div class="hero-note">Students can submit requests and follow updates more clearly.</div>
+                                <div class="hero-note">Staff can coordinate follow-up, reports, and communication more smoothly.</div>
                             </div>
-                            {% if form.errors %}
-                                <div class="alert alert-danger py-2">Invalid username or password. Please try again.</div>
-                            {% endif %}
-                            <button class="btn btn-primary w-100" type="submit">Sign in</button>
-                        </form>
-                        <div class="text-center mt-3">
-                            <a href="{% url 'student_request_public' %}">Student request form</a>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="card shadow-lg border-0 premium-card h-100">
+                            <div class="card-body p-4 p-lg-5 d-flex flex-column justify-content-center">
+                                <span class="section-kicker">Secure access</span>
+                                <h2 class="section-title mb-2">Sign in</h2>
+                                <p class="section-subtitle mb-4">Use your username or email address to open your portal or staff workspace.</p>
+                                <form method="post">
+                                    {% csrf_token %}
+                                    <div class="mb-3">
+                                        <label class="form-label" for="id_username">Login ID</label>
+                                        <input class="form-control" type="text" name="username" id="id_username" required>
+                                        <div class="form-text">Use your username or email address.</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="id_password">Password</label>
+                                        <input class="form-control" type="password" name="password" id="id_password" required>
+                                    </div>
+                                    {% if form.errors %}
+                                        <div class="alert alert-danger py-2">Invalid username or password. Please try again.</div>
+                                    {% endif %}
+                                    <button class="btn btn-primary premium-btn w-100" type="submit">Sign in</button>
+                                </form>
+                                <div class="text-center mt-4">
+                                    <a href="{% url 'student_request_public' %}">Open the public student request form</a>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

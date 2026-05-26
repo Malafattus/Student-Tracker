@@ -1,33 +1,42 @@
 {% extends "base.html" %}
 {% block title %}Dashboard | UIS Student Record System{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-    <div>
-        <h1 class="h3 mb-1">Dashboard</h1>
-        <p class="text-muted mb-0">Live view of student cases, workload, and urgent follow-up needs.</p>
+<section class="hero-shell mb-4">
+    <div class="hero-panel">
+        <div>
+            <span class="eyebrow">Team Workspace</span>
+            <h1 class="display-title mb-2">Student support at a glance.</h1>
+            <p class="hero-copy mb-0">Track active cases, rising concerns, overdue work, and recent school activity from one calm command center.</p>
+        </div>
+        {% if role_flags.is_admin or role_flags.is_counsellor %}
+            <div class="hero-actions">
+                <a class="btn btn-primary premium-btn" href="{% url 'student_create' %}">Add New Student</a>
+            </div>
+        {% endif %}
     </div>
-    {% if role_flags.is_admin or role_flags.is_counsellor %}
-        <a class="btn btn-primary" href="{% url 'student_create' %}">Add New Student</a>
-    {% endif %}
-</div>
+</section>
+
 <div class="row g-3 mb-4">
-    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Total active students</div><div class="stat-value">{{ stats.active_students }}</div></div></div></div>
-    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Students requiring follow-up</div><div class="stat-value">{{ stats.follow_up }}</div></div></div></div>
-    <div class="col-md-3"><div class="card stat-card urgent"><div class="card-body"><div class="stat-label">Urgent-risk students</div><div class="stat-value">{{ stats.urgent_risk }}</div></div></div></div>
-    <div class="col-md-3"><div class="card stat-card warning"><div class="card-body"><div class="stat-label">Overdue tasks</div><div class="stat-value">{{ stats.overdue_tasks }}</div></div></div></div>
-    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Missing documents</div><div class="stat-value">{{ stats.missing_documents }}</div></div></div></div>
-    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Payment issues</div><div class="stat-value">{{ stats.payment_issues }}</div></div></div></div>
-    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Homestay issues</div><div class="stat-value">{{ stats.homestay_issues }}</div></div></div></div>
-    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Open requests</div><div class="stat-value">{{ stats.open_requests }}</div></div></div></div>
-    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Upcoming sessions</div><div class="stat-value">{{ stats.upcoming_sessions }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Total active students</div><div class="stat-value">{{ stats.active_students }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Students requiring follow-up</div><div class="stat-value">{{ stats.follow_up }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card urgent"><div class="card-body"><div class="stat-label">Urgent-risk students</div><div class="stat-value">{{ stats.urgent_risk }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card warning"><div class="card-body"><div class="stat-label">Overdue tasks</div><div class="stat-value">{{ stats.overdue_tasks }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Missing documents</div><div class="stat-value">{{ stats.missing_documents }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Payment issues</div><div class="stat-value">{{ stats.payment_issues }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Homestay issues</div><div class="stat-value">{{ stats.homestay_issues }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Open requests</div><div class="stat-value">{{ stats.open_requests }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Upcoming sessions</div><div class="stat-value">{{ stats.upcoming_sessions }}</div></div></div></div>
 </div>
+
 <div class="row g-4">
     <div class="col-lg-7">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white">
-                <h2 class="h5 mb-0">Recently updated students</h2>
+        <div class="card shadow-sm premium-card">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Cases</span>
+                <h2 class="section-title mb-1">Recently updated students</h2>
+                <p class="section-subtitle mb-0">A quick pulse check on the students whose records changed most recently.</p>
             </div>
-            <div class="table-responsive">
+            <div class="table-responsive premium-table">
                 <table class="table table-hover mb-0">
                     <thead><tr><th>Name</th><th>Grade</th><th>Counsellor</th><th>Risk</th><th>Updated</th></tr></thead>
                     <tbody>
@@ -48,35 +57,37 @@
         </div>
     </div>
     <div class="col-lg-5">
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-white">
-                <h2 class="h5 mb-0">Recent student requests</h2>
+        <div class="card shadow-sm premium-card mb-4">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Requests</span>
+                <h2 class="section-title mb-1">Recent student requests</h2>
             </div>
             <div class="list-group list-group-flush">
                 {% for item in recent_requests %}
-                    <div class="list-group-item">
+                    <div class="list-group-item border-0 px-4 py-3">
                         <div class="fw-semibold">{{ item.get_request_type_display }}</div>
                         <div class="small text-muted">{{ item.submitted_by_name }} | {{ item.get_status_display }}</div>
                         <div class="small">{{ item.title }}</div>
                     </div>
                 {% empty %}
-                    <div class="list-group-item text-muted">No recent requests yet.</div>
+                    <div class="list-group-item border-0 px-4 py-3 text-muted">No recent requests yet.</div>
                 {% endfor %}
             </div>
         </div>
-        <div class="card shadow-sm">
-            <div class="card-header bg-white">
-                <h2 class="h5 mb-0">Recent audit activity</h2>
+        <div class="card shadow-sm premium-card">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Activity</span>
+                <h2 class="section-title mb-1">Recent audit activity</h2>
             </div>
             <div class="list-group list-group-flush">
                 {% for item in recent_audit_logs %}
-                    <div class="list-group-item">
+                    <div class="list-group-item border-0 px-4 py-3">
                         <div class="fw-semibold">{{ item.action|title }} {{ item.model_name }}</div>
                         <div class="small text-muted">{{ item.object_repr }}</div>
                         <div class="small text-muted">{{ item.created_at|date:"M j, Y g:i A" }}</div>
                     </div>
                 {% empty %}
-                    <div class="list-group-item text-muted">No recent activity yet.</div>
+                    <div class="list-group-item border-0 px-4 py-3 text-muted">No recent activity yet.</div>
                 {% endfor %}
             </div>
         </div>

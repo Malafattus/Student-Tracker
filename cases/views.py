@@ -221,11 +221,37 @@ class PortalDashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         student = current_student_for_user(self.request.user)
+        requests = student.requests.prefetch_related("attachments", "responses").order_by("-created_at")
+        sessions = student.sessions.order_by("start_at")
+        next_session = sessions.filter(start_at__gte=timezone.now()).first()
+        open_request = requests.exclude(
+            status__in=[StudentRequest.STATUS_COMPLETED, StudentRequest.STATUS_CLOSED, StudentRequest.STATUS_DECLINED]
+        ).first()
+        missing_documents = student.documents.filter(status="missing")
         context["student"] = student
-        context["requests"] = student.requests.prefetch_related("attachments", "responses").order_by("-created_at")
-        context["sessions"] = student.sessions.order_by("start_at")
+        context["requests"] = requests
+        context["sessions"] = sessions
+        context["next_session"] = next_session
+        context["open_request"] = open_request
         context["term_records"] = student.term_records.prefetch_related("courses", "term").all()
-        context["missing_documents"] = student.documents.filter(status="missing")
+        context["missing_documents"] = missing_documents
+        context["student_next_steps"] = [
+            {
+                "title": "Submit a request",
+                "body": "Use the portal to ask for transcripts, counselling sessions, or document support.",
+                "done": requests.exists(),
+            },
+            {
+                "title": "Check missing documents",
+                "body": "Review any missing items so the school team can keep your case moving forward.",
+                "done": not missing_documents.exists(),
+            },
+            {
+                "title": "Watch for school updates",
+                "body": "Your portal and email will show replies once staff review your requests.",
+                "done": requests.filter(responses__isnull=False).exists(),
+            },
+        ]
         return context
 
 
