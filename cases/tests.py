@@ -110,6 +110,40 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Communication Center")
 
+    def test_counsellor_can_open_academic_progress_workspace(self):
+        term = AcademicTerm.objects.create(
+            school_year="2026-2027",
+            name="Term 1",
+            display_order=1,
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 11, 17),
+            is_active=True,
+        )
+        StudentTermRecord.objects.create(student=self.student, term=term, planned_course_count=3)
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("academic_progress"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Track grades, credits, and graduation progress.")
+        self.assertContains(response, "Test Student")
+
+    def test_academic_progress_workspace_filters_by_team(self):
+        Student.objects.create(
+            full_name="Other Team Student",
+            student_id="S7171",
+            grade="11",
+            nationality="Japan",
+            support_team="Japanese Team",
+            case_stage=Student.STAGE_ACTIVE,
+            credits_remaining_manual=6,
+        )
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        response = client.get(reverse("academic_progress"), {"team": "Japanese Team"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Other Team Student")
+        self.assertNotContains(response, "Test Student")
+
     def test_student_list_can_filter_by_case_stage(self):
         Student.objects.create(
             full_name="Waiting Student",

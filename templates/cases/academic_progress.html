@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Academic Progress | UIS Student Record System{% endblock %}
+{% block content %}
+<div class="ops-shell">
+    <section class="ops-hero is-soft">
+        <div>
+            <span class="ops-eyebrow">Academic Workspace</span>
+            <h1 class="ops-hero-title">Track grades, credits, and graduation progress.</h1>
+            <p class="ops-hero-copy">Review the terms that still need setup, midterm grades, final grades, or credit follow-up, without opening each student one at a time.</p>
+        </div>
+        <div class="ops-hero-actions">
+            <div class="ops-pill-group">
+                <span class="ops-pill">{{ stats.students }} student{{ stats.students|pluralize }}</span>
+                <span class="ops-pill">{{ stats.watchlist }} on graduation watch</span>
+            </div>
+        </div>
+    </section>
+
+    <div class="ops-stat-grid">
+        <div class="ops-stat-card"><div class="label">Needs term setup</div><div class="value">{{ stats.setup }}</div></div>
+        <div class="ops-stat-card"><div class="label">Midterms due</div><div class="value">{{ stats.midterms }}</div></div>
+        <div class="ops-stat-card"><div class="label">Finals due</div><div class="value">{{ stats.finals }}</div></div>
+        <div class="ops-stat-card"><div class="label">Credits pending</div><div class="value">{{ stats.credit_gaps }}</div></div>
+        <div class="ops-stat-card"><div class="label">Students on watch</div><div class="value">{{ stats.watchlist }}</div></div>
+    </div>
+
+    <div class="ops-filter-card">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Team</label>
+                <select class="form-select" name="team">
+                    <option value="">All teams</option>
+                    {% for team in team_choices %}
+                        <option value="{{ team }}" {% if team == selected_team %}selected{% endif %}>{{ team }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">School year</label>
+                <select class="form-select" name="year">
+                    <option value="">All school years</option>
+                    {% for year in school_year_choices %}
+                        <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 d-flex gap-2">
+                <button class="btn btn-primary" type="submit">Apply</button>
+                <a class="btn btn-outline-secondary" href="{% url 'academic_progress' %}">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="ops-grid-two mb-4">
+        <div class="ops-section-card">
+            <div class="ops-section-head">
+                <div>
+                    <h2 class="ops-section-title">Terms needing action</h2>
+                    <p class="ops-section-copy">The terms counsellors should work through next, ordered by what is most urgent.</p>
+                </div>
+            </div>
+            <div class="ops-table-wrap">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Term</th>
+                            <th>Status</th>
+                            <th>Recorded</th>
+                            <th>Checkpoint</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in checkpoint_rows %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold"><a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a></div>
+                                    <div class="small text-muted">{{ item.student.support_team|default:"No team" }} | {{ item.student.assigned_counsellor.get_full_name|default:"Unassigned" }}</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">{{ item.record.term }}</div>
+                                    <div class="small text-muted">{{ item.record.course_load }} planned course{{ item.record.course_load|pluralize }}</div>
+                                </td>
+                                <td>
+                                    <span class="badge {% if item.status_label == 'Final grades due' or item.status_label == 'Credits still pending' %}text-bg-danger{% elif item.status_label == 'Midterm grades due' or item.status_label == 'Needs setup' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ item.status_label }}</span>
+                                    <div class="small text-muted mt-2">{{ item.detail }}</div>
+                                </td>
+                                <td>
+                                    <div class="small">Midterms: {{ item.midterm_recorded }} / {{ item.record.course_load }}</div>
+                                    <div class="small">Finals: {{ item.final_recorded }} / {{ item.record.course_load }}</div>
+                                </td>
+                                <td>
+                                    {% if item.checkpoint_date %}
+                                        <div class="fw-semibold">{{ item.checkpoint_type|title }}</div>
+                                        <div class="small text-muted">{{ item.checkpoint_date }}</div>
+                                    {% else %}
+                                        <span class="text-muted">Set term first</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="5" class="text-center text-muted py-4">No academic term actions are waiting right now.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="ops-section-card">
+            <div class="ops-section-head">
+                <div>
+                    <h2 class="ops-section-title">Graduation watchlist</h2>
+                    <p class="ops-section-copy">Students who still need credits, volunteer hours, or literacy follow-up.</p>
+                </div>
+            </div>
+            <div class="ops-section-body">
+                <div class="ops-list">
+                    {% for item in watch_rows %}
+                        <div class="ops-list-item">
+                            <div class="ops-list-title"><a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a></div>
+                            <div class="ops-list-meta">{{ item.student.support_team|default:"No team" }} | {{ item.counsellor }}</div>
+                            <div class="dashboard-chip-row">
+                                {% for issue in item.issues %}
+                                    <span class="dashboard-chip">{{ issue }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="empty-state-panel">
+                            <div class="empty-state-title">No students need graduation follow-up right now</div>
+                            <div class="empty-state-copy">Credits, volunteer hours, and literacy milestones are all in a healthy place at the moment.</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ops-section-card">
+        <div class="ops-section-head">
+            <div>
+                <h2 class="ops-section-title">Team summary</h2>
+                <p class="ops-section-copy">A light team-by-team snapshot of where academic follow-up is concentrated.</p>
+            </div>
+        </div>
+        <div class="ops-table-wrap">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Team</th>
+                        <th>Students</th>
+                        <th>Credits left</th>
+                        <th>Hours left</th>
+                        <th>Literacy follow-up</th>
+                        <th>Term actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in team_rows %}
+                        <tr>
+                            <td class="fw-semibold">{{ item.team }}</td>
+                            <td>{{ item.students }}</td>
+                            <td>{{ item.credits }}</td>
+                            <td>{{ item.volunteer }}</td>
+                            <td>{{ item.literacy }}</td>
+                            <td>{{ item.term_actions }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6" class="text-center text-muted py-4">No team progress data yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

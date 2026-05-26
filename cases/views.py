@@ -307,6 +307,112 @@ def reopen_session_item(session):
     session.save(update_fields=["is_closed", "closed_by", "closed_at", "updated_at"])
 
 
+def build_academic_progress_rows(students):
+    checkpoint_rows = []
+    student_watch_rows = []
+    team_totals = {}
+
+    for student in students:
+        team_name = student.support_team or "No team"
+        team_totals.setdefault(
+            team_name,
+            {
+                "team": team_name,
+                "students": 0,
+                "credits": 0,
+                "volunteer": 0,
+                "literacy": 0,
+                "term_actions": 0,
+            },
+        )
+        team_totals[team_name]["students"] += 1
+
+        watch_issues = []
+        if student.credits_remaining > 0:
+            watch_issues.append(f"{student.credits_remaining} credit{'s' if student.credits_remaining != 1 else ''} remaining")
+            team_totals[team_name]["credits"] += 1
+        if student.volunteer_hours_remaining > 0:
+            watch_issues.append(
+                f"{student.volunteer_hours_remaining} volunteer hour{'s' if student.volunteer_hours_remaining != 1 else ''} left"
+            )
+            team_totals[team_name]["volunteer"] += 1
+        if student.osslt_status == Student.OSSLT_PENDING:
+            watch_issues.append("OSSLT still pending")
+            team_totals[team_name]["literacy"] += 1
+        elif student.osslt_status == Student.OSSLT_OLC4O:
+            watch_issues.append("OLC4O still needs completion")
+            team_totals[team_name]["literacy"] += 1
+
+        if watch_issues:
+            student_watch_rows.append(
+                {
+                    "student": student,
+                    "issues": watch_issues,
+                    "counsellor": student.assigned_counsellor.get_full_name() if student.assigned_counsellor else "Unassigned",
+                }
+            )
+
+        for record in student.term_records.all():
+            checkpoint_date, checkpoint_type = record.next_report_checkpoint
+            status_label = ""
+            priority = 0
+            detail = ""
+
+            if record.course_load == 0:
+                status_label = "Needs setup"
+                priority = 4
+                detail = "Choose the number of courses or add the exact classes for this term."
+            elif checkpoint_type == "final":
+                status_label = "Final grades due"
+                priority = 3
+                detail = "Enter final grades, confirm earned credits, and prepare the final report."
+            elif checkpoint_type == "midterm":
+                status_label = "Midterm grades due"
+                priority = 2
+                detail = "Enter midterm grades and prepare the midterm report update."
+            elif record.is_completed and record.earned_credit_count < record.course_load:
+                status_label = "Credits still pending"
+                priority = 1
+                detail = "Some planned courses in this completed term have not turned into earned credits yet."
+
+            if status_label:
+                checkpoint_rows.append(
+                    {
+                        "student": student,
+                        "record": record,
+                        "status_label": status_label,
+                        "detail": detail,
+                        "checkpoint_date": checkpoint_date,
+                        "checkpoint_type": checkpoint_type,
+                        "midterm_recorded": record.midterm_recorded_count,
+                        "final_recorded": record.final_recorded_count,
+                        "priority": priority,
+                    }
+                )
+                team_totals[team_name]["term_actions"] += 1
+
+    checkpoint_rows.sort(
+        key=lambda item: (
+            -item["priority"],
+            item["checkpoint_date"] or date.max,
+            item["student"].full_name,
+            item["record"].term.display_order,
+        )
+    )
+    student_watch_rows.sort(
+        key=lambda item: (
+            -len(item["issues"]),
+            item["student"].credits_remaining,
+            item["student"].full_name,
+        )
+    )
+    team_rows = sorted(
+        team_totals.values(),
+        key=lambda item: (-item["term_actions"], -item["credits"], item["team"]),
+    )
+    return checkpoint_rows, student_watch_rows, team_rows
+
+
 def month_bounds(year, month):
     if month == 12:
         return date(year, month, 1), date(year + 1, 1, 1)
@@ -661,6 +767,67 @@ class StudentListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["filter_form"] = self.filter_form
+        return context
+
+
+class AcademicProgressView(LoginRequiredMixin, TemplateView):
+    template_name = "cases/academic_progress.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_portal_user(request)
+        if portal_redirect:
+            return portal_redirect
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        students = (
+            student_queryset_for_user(self.request.user)
+            .select_related("assigned_counsellor")
+            .prefetch_related("term_records__term", "term_records__courses")
+        )
+        selected_team = (self.request.GET.get("team") or "").strip()
+        selected_year = (self.request.GET.get("year") or "").strip()
+
+        if selected_team:
+            students = students.filter(support_team__iexact=selected_team)
+        if selected_year:
+            students = students.filter(term_records__term__school_year=selected_year).distinct()
+
+        student_list = list(students)
+        checkpoint_rows, watch_rows, team_rows = build_academic_progress_rows(student_list)
+
+        if selected_year:
+            checkpoint_rows = [
+                item for item in checkpoint_rows if item["record"].term.school_year == selected_year
+            ]
+
+        context["selected_team"] = selected_team
+        context["selected_year"] = selected_year
+        context["team_choices"] = [
+            team
+            for team in student_queryset_for_user(self.request.user)
+            .exclude(support_team="")
+            .order_by("support_team")
+            .values_list("support_team", flat=True)
+            .distinct()
+        ]
+        context["school_year_choices"] = list(
+            AcademicTerm.objects.order_by("school_year")
+            .values_list("school_year", flat=True)
+            .distinct()
+        )
+        context["stats"] = {
+            "students": len(student_list),
+            "setup": sum(1 for item in checkpoint_rows if item["status_label"] == "Needs setup"),
+            "midterms": sum(1 for item in checkpoint_rows if item["status_label"] == "Midterm grades due"),
+            "finals": sum(1 for item in checkpoint_rows if item["status_label"] == "Final grades due"),
+            "credit_gaps": sum(1 for item in checkpoint_rows if item["status_label"] == "Credits still pending"),
+            "watchlist": len(watch_rows),
+        }
+        context["checkpoint_rows"] = checkpoint_rows
+        context["watch_rows"] = watch_rows[:12]
+        context["team_rows"] = team_rows
         return context
 
 

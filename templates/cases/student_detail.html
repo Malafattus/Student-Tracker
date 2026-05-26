@@ -108,45 +108,65 @@
         </div>
     </div>
     <div class="row g-4">
-        <div class="col-lg-6"><div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Case overview</h2></div><div class="card-body detail-grid">
-            <div><strong>Assigned counsellor:</strong> {{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</div>
-            <div><strong>Support team:</strong> {{ student.support_team|default:"Not set" }}</div>
-            <div><strong>Date of birth:</strong> {{ student.date_of_birth|default:"-" }}</div>
-            <div><strong>Case stage:</strong> {{ student.get_case_stage_display }}</div>
-            <div><strong>Next review date:</strong> {{ student.next_review_date|default:"-" }}</div>
-            <div><strong>Agency:</strong> {{ student.agency|default:"-" }}</div>
-            <div><strong>Preferred language:</strong> {{ student.preferred_language|default:"-" }}</div>
-            <div><strong>Target country:</strong> {{ student.target_country|default:"-" }}</div>
-            <div><strong>Target program:</strong> {{ student.target_program|default:"-" }}</div>
-            <div><strong>Universities:</strong> {{ student.target_universities|default:"-" }}</div>
-            <div><strong>Academic status:</strong> {{ student.get_academic_status_display }}</div>
-            <div><strong>Completed credits:</strong> {{ student.earned_credits }} / {{ student.required_credits }}</div>
-            <div><strong>Credits remaining:</strong> {{ student.credits_remaining }}</div>
-            <div><strong>Graduation:</strong> {{ student.get_graduation_status_display }}</div>
-            <div><strong>Counselling:</strong> {{ student.get_counselling_status_display }}</div>
-            <div><strong>Application status:</strong> {{ student.get_university_application_status_display }}</div>
-            <div><strong>OSSLT status:</strong> {{ student.get_osslt_status_display }}</div>
-            <div><strong>Volunteer hours:</strong> {{ student.volunteer_hours_completed_total }} / {{ student.volunteer_hours_required }}</div>
-            <div><strong>Volunteer hours remaining:</strong> {{ student.volunteer_hours_remaining }}</div>
-            <div><strong>Risk level:</strong> {{ student.get_overall_risk_level_display }}</div>
-            <div><strong>Payment status:</strong> {{ student.get_payment_status_display }}</div>
-            <div><strong>Homestay status:</strong> {{ student.get_homestay_status_display }}</div>
-            <div><strong>Insurance status:</strong> {{ student.get_insurance_status_display }}</div>
+        <div class="col-lg-6"><div class="card shadow-sm premium-card"><div class="card-header bg-white border-0 pb-0"><span class="section-kicker">Student</span><h2 class="section-title mb-1">Student summary</h2><p class="section-subtitle mb-0">The core profile and academic context staff need most often.</p></div><div class="card-body">
+            <div class="info-grid">
+                <div><span class="info-label">Assigned counsellor</span><span class="info-value">{{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</span></div>
+                <div><span class="info-label">Support team</span><span class="info-value">{{ student.support_team|default:"Not set" }}</span></div>
+                <div><span class="info-label">Date of birth</span><span class="info-value">{{ student.date_of_birth|default:"-" }}</span></div>
+                <div><span class="info-label">Case stage</span><span class="info-value">{{ student.get_case_stage_display }}</span></div>
+                <div><span class="info-label">Next review date</span><span class="info-value">{{ student.next_review_date|default:"-" }}</span></div>
+                <div><span class="info-label">Agency</span><span class="info-value">{{ student.agency|default:"-" }}</span></div>
+                <div><span class="info-label">Preferred language</span><span class="info-value">{{ student.preferred_language|default:"-" }}</span></div>
+                <div><span class="info-label">Academic status</span><span class="info-value">{{ student.get_academic_status_display }}</span></div>
+                <div><span class="info-label">Application status</span><span class="info-value">{{ student.get_university_application_status_display }}</span></div>
+                <div><span class="info-label">Graduation</span><span class="info-value">{{ student.get_graduation_status_display }}</span></div>
+                <div><span class="info-label">Counselling</span><span class="info-value">{{ student.get_counselling_status_display }}</span></div>
+                <div><span class="info-label">Risk level</span><span class="info-value">{{ student.get_overall_risk_level_display }}</span></div>
+                <div><span class="info-label">Target country</span><span class="info-value">{{ student.target_country|default:"-" }}</span></div>
+                <div><span class="info-label">Target program</span><span class="info-value">{{ student.target_program|default:"-" }}</span></div>
+                <div><span class="info-label">Universities</span><span class="info-value">{{ student.target_universities|default:"-" }}</span></div>
+                <div><span class="info-label">OSSLT status</span><span class="info-value">{{ student.get_osslt_status_display }}</span></div>
+                <div><span class="info-label">Completed credits</span><span class="info-value">{{ student.earned_credits }} / {{ student.required_credits }}</span></div>
+                <div><span class="info-label">Credits remaining</span><span class="info-value">{{ student.credits_remaining }}</span></div>
+                <div><span class="info-label">Volunteer hours</span><span class="info-value">{{ student.volunteer_hours_completed_total }} / {{ student.volunteer_hours_required }}</span></div>
+                <div><span class="info-label">Volunteer hours remaining</span><span class="info-value">{{ student.volunteer_hours_remaining }}</span></div>
+                <div><span class="info-label">Payment status</span><span class="info-value">{{ student.get_payment_status_display }}</span></div>
+                <div><span class="info-label">Homestay status</span><span class="info-value">{{ student.get_homestay_status_display }}</span></div>
+                <div><span class="info-label">Insurance status</span><span class="info-value">{{ student.get_insurance_status_display }}</span></div>
+            </div>
         </div></div></div>
-        <div class="col-lg-6"><div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Family and internal summary</h2></div><div class="card-body">
-            <p><strong>Parent/guardian:</strong> {{ student.parent_guardian_name|default:"-" }}</p>
-            <p><strong>Email:</strong> {{ student.parent_guardian_email|default:"-" }}</p>
-            <p><strong>Phone:</strong> {{ student.parent_guardian_phone|default:"-" }}</p>
-            <p><strong>Parent portal access:</strong>
-                {% for link in parent_access_links %}
-                    {{ link.user.get_full_name|default:link.user.username }}{% if not link.is_active %} (inactive){% endif %}{% if not forloop.last %}, {% endif %}
-                {% empty %}
-                    No parent portal linked yet.
-                {% endfor %}
-            </p>
-            <p><strong>IELTS/English status:</strong> {{ student.ielts_english_status|default:"-" }}</p>
-            <p><strong>Attendance concerns:</strong><br>{{ student.attendance_concerns|default:"No concerns recorded." }}</p>
-            <p class="mb-0"><strong>Internal summary:</strong><br>{{ student.internal_summary|default:"No summary yet." }}</p>
+        <div class="col-lg-6"><div class="card shadow-sm premium-card"><div class="card-header bg-white border-0 pb-0"><span class="section-kicker">Family</span><h2 class="section-title mb-1">Family and school notes</h2><p class="section-subtitle mb-0">Parent contact details, portal links, and the key internal notes around this student.</p></div><div class="card-body">
+            <div class="info-grid">
+                <div><span class="info-label">Parent or guardian</span><span class="info-value">{{ student.parent_guardian_name|default:"-" }}</span></div>
+                <div><span class="info-label">Email</span><span class="info-value">{{ student.parent_guardian_email|default:"-" }}</span></div>
+                <div><span class="info-label">Phone</span><span class="info-value">{{ student.parent_guardian_phone|default:"-" }}</span></div>
+                <div><span class="info-label">IELTS or English status</span><span class="info-value">{{ student.ielts_english_status|default:"-" }}</span></div>
+            </div>
+            <div class="soft-divider"></div>
+            <div class="mb-3">
+                <span class="info-label">Parent portal access</span>
+                <div class="stacked-list">
+                    {% for link in parent_access_links %}
+                        <div class="stacked-list-item">
+                            <div class="fw-semibold">{{ link.user.get_full_name|default:link.user.username }}</div>
+                            <div class="small text-muted">{{ link.get_relationship_label_display }}{% if not link.is_active %} | Inactive{% endif %}</div>
+                        </div>
+                    {% empty %}
+                        <div class="empty-state-panel compact">
+                            <div class="empty-state-copy">No parent portal linked yet.</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="soft-divider"></div>
+            <div class="mb-3">
+                <span class="info-label">Attendance concerns</span>
+                <div class="student-summary-box">{{ student.attendance_concerns|default:"No concerns recorded."|linebreaksbr }}</div>
+            </div>
+            <div>
+                <span class="info-label">Internal summary</span>
+                <div class="student-summary-box">{{ student.internal_summary|default:"No summary yet."|linebreaksbr }}</div>
+            </div>
         </div></div></div>
     </div>
     <div class="row g-4 mt-1">

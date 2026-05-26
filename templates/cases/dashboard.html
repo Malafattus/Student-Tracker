@@ -68,8 +68,13 @@
     <div class="col-lg-3">
         <div class="card shadow-sm premium-card h-100">
             <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">Progress</span>
-                <h2 class="section-title mb-1">Academic watchlist</h2>
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                    <div>
+                        <span class="section-kicker">Progress</span>
+                        <h2 class="section-title mb-1">Academic watchlist</h2>
+                    </div>
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'academic_progress' %}">Open workspace</a>
+                </div>
             </div>
             <div class="card-body">
                 <div class="dashboard-chip-row mb-3">
