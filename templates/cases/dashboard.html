@@ -21,9 +21,6 @@
     <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Students requiring follow-up</div><div class="stat-value">{{ stats.follow_up }}</div></div></div></div>
     <div class="col-md-6 col-xl-3"><div class="card stat-card urgent"><div class="card-body"><div class="stat-label">Urgent-risk students</div><div class="stat-value">{{ stats.urgent_risk }}</div></div></div></div>
     <div class="col-md-6 col-xl-3"><div class="card stat-card warning"><div class="card-body"><div class="stat-label">Overdue tasks</div><div class="stat-value">{{ stats.overdue_tasks }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Missing documents</div><div class="stat-value">{{ stats.missing_documents }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Payment issues</div><div class="stat-value">{{ stats.payment_issues }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Homestay issues</div><div class="stat-value">{{ stats.homestay_issues }}</div></div></div></div>
     <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Open requests</div><div class="stat-value">{{ stats.open_requests }}</div></div></div></div>
     <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Upcoming sessions</div><div class="stat-value">{{ stats.upcoming_sessions }}</div></div></div></div>
     <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Reviews this week</div><div class="stat-value">{{ stats.reviews_this_week }}</div></div></div></div>
@@ -102,8 +99,8 @@
     <div class="col-lg-5">
         <div class="card shadow-sm premium-card mb-4">
             <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">Leadership</span>
-                <h2 class="section-title mb-1">Overdue reviews and workload</h2>
+                <span class="section-kicker">Focus</span>
+                <h2 class="section-title mb-1">What needs attention now</h2>
             </div>
             <div class="card-body">
                 <div class="status-panel subtle mb-4">
@@ -121,31 +118,11 @@
                         <div class="empty-state-copy">No student reviews are overdue right now.</div>
                     {% endfor %}
                 </div>
-                <div class="table-responsive premium-table">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead><tr><th>Counsellor</th><th>Students</th><th>Due reviews</th><th>Open tasks</th></tr></thead>
-                        <tbody>
-                            {% for counsellor in counsellor_workload %}
-                                <tr>
-                                    <td>{{ counsellor.get_full_name|default:counsellor.username }}</td>
-                                    <td>{{ counsellor.student_total }}</td>
-                                    <td>{{ counsellor.due_reviews }}</td>
-                                    <td>{{ counsellor.open_tasks }}</td>
-                                </tr>
-                            {% empty %}
-                                <tr><td colspan="4" class="text-center text-muted py-3">No counsellor workload data yet.</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="card shadow-sm premium-card mb-4">
-            <div class="card-header bg-white border-0 pb-0">
                 <span class="section-kicker">Requests</span>
                 <h2 class="section-title mb-1">Recent student requests</h2>
+                <p class="section-subtitle mb-0">The newest student needs, without opening the full queue.</p>
             </div>
-            <div class="list-group list-group-flush">
+            <div class="list-group list-group-flush mt-3">
                 {% for item in recent_requests %}
                     <div class="list-group-item border-0 px-4 py-3">
                         <div class="fw-semibold">{{ item.get_request_type_display }}</div>
@@ -157,65 +134,126 @@
                 {% endfor %}
             </div>
         </div>
-        <div class="card shadow-sm premium-card">
-            <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">Activity</span>
-                <h2 class="section-title mb-1">Recent audit activity</h2>
+    </div>
+</div>
+
+<div class="card shadow-sm premium-card mt-4">
+    <div class="card-header bg-white border-0">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <span class="section-kicker">More Detail</span>
+                <h2 class="section-title mb-1">Operational detail when you need it</h2>
+                <p class="section-subtitle mb-0">Keep the homepage calm, but still let staff drill into workload, team trends, and activity.</p>
             </div>
-            <div class="list-group list-group-flush">
-                {% for item in recent_audit_logs %}
-                    <div class="list-group-item border-0 px-4 py-3">
-                        <div class="fw-semibold">{{ item.action|title }} {{ item.model_name }}</div>
-                        <div class="small text-muted">{{ item.object_repr }}</div>
-                        <div class="small text-muted">{{ item.created_at|date:"M j, Y g:i A" }}</div>
-                    </div>
-                {% empty %}
-                    <div class="list-group-item border-0 px-4 py-3 text-muted">No recent activity yet.</div>
-                {% endfor %}
-            </div>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#dashboardSecondary">
+                Show or hide details
+            </button>
         </div>
-        <div class="card shadow-sm premium-card mt-4">
-            <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">Communications</span>
-                <h2 class="section-title mb-1">Recent message activity</h2>
-            </div>
-            <div class="list-group list-group-flush">
-                {% for item in recent_communications %}
-                    <div class="list-group-item border-0 px-4 py-3">
-                        <div class="fw-semibold">{{ item.subject|default:item.get_category_display }}</div>
-                        <div class="small text-muted">{{ item.student.full_name }} | {{ item.get_status_display }}</div>
-                        <div class="small text-muted">{{ item.communicated_at|date:"M j, Y g:i A" }}</div>
+    </div>
+    <div class="collapse" id="dashboardSecondary">
+        <div class="card-body pt-0">
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="card shadow-sm premium-card h-100">
+                        <div class="card-header bg-white border-0 pb-0">
+                            <span class="section-kicker">Workload</span>
+                            <h2 class="section-title mb-1">Counsellor overview</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive premium-table">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead><tr><th>Counsellor</th><th>Students</th><th>Due reviews</th><th>Open tasks</th></tr></thead>
+                                    <tbody>
+                                        {% for counsellor in counsellor_workload %}
+                                            <tr>
+                                                <td>{{ counsellor.get_full_name|default:counsellor.username }}</td>
+                                                <td>{{ counsellor.student_total }}</td>
+                                                <td>{{ counsellor.due_reviews }}</td>
+                                                <td>{{ counsellor.open_tasks }}</td>
+                                            </tr>
+                                        {% empty %}
+                                            <tr><td colspan="4" class="text-center text-muted py-3">No counsellor workload data yet.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                {% empty %}
-                    <div class="list-group-item border-0 px-4 py-3 text-muted">No communication history yet.</div>
-                {% endfor %}
+                </div>
+                <div class="col-lg-4">
+                    <div class="card shadow-sm premium-card h-100">
+                        <div class="card-header bg-white border-0 pb-0">
+                            <span class="section-kicker">Teams</span>
+                            <h2 class="section-title mb-1">Team summary</h2>
+                        </div>
+                        <div class="card-body">
+                            {% if team_summary %}
+                                <div class="table-responsive premium-table">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead><tr><th>Team</th><th>Students</th><th>Urgent</th><th>Requests</th></tr></thead>
+                                        <tbody>
+                                            {% for team in team_summary %}
+                                                <tr>
+                                                    <td>{{ team.support_team }}</td>
+                                                    <td>{{ team.student_total }}</td>
+                                                    <td>{{ team.urgent_total }}</td>
+                                                    <td>{{ team.open_requests }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <div class="empty-state-copy">No team summary data yet.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="mini-stat-grid dashboard-secondary-stats mb-4">
+                        <div class="mini-stat-card"><div class="mini-stat-label">Missing documents</div><div class="mini-stat-value">{{ stats.missing_documents }}</div></div>
+                        <div class="mini-stat-card"><div class="mini-stat-label">Payment issues</div><div class="mini-stat-value">{{ stats.payment_issues }}</div></div>
+                        <div class="mini-stat-card"><div class="mini-stat-label">Homestay issues</div><div class="mini-stat-value">{{ stats.homestay_issues }}</div></div>
+                    </div>
+                    <div class="card shadow-sm premium-card">
+                        <div class="card-header bg-white border-0 pb-0">
+                            <span class="section-kicker">Communications</span>
+                            <h2 class="section-title mb-1">Recent message activity</h2>
+                        </div>
+                        <div class="list-group list-group-flush">
+                            {% for item in recent_communications %}
+                                <div class="list-group-item border-0 px-4 py-3">
+                                    <div class="fw-semibold">{{ item.subject|default:item.get_category_display }}</div>
+                                    <div class="small text-muted">{{ item.student.full_name }} | {{ item.get_status_display }}</div>
+                                    <div class="small text-muted">{{ item.communicated_at|date:"M j, Y g:i A" }}</div>
+                                </div>
+                            {% empty %}
+                                <div class="list-group-item border-0 px-4 py-3 text-muted">No communication history yet.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card shadow-sm premium-card">
+                        <div class="card-header bg-white border-0 pb-0">
+                            <span class="section-kicker">Activity</span>
+                            <h2 class="section-title mb-1">Recent audit activity</h2>
+                        </div>
+                        <div class="list-group list-group-flush">
+                            {% for item in recent_audit_logs %}
+                                <div class="list-group-item border-0 px-4 py-3">
+                                    <div class="fw-semibold">{{ item.action|title }} {{ item.model_name }}</div>
+                                    <div class="small text-muted">{{ item.object_repr }}</div>
+                                    <div class="small text-muted">{{ item.created_at|date:"M j, Y g:i A" }}</div>
+                                </div>
+                            {% empty %}
+                                <div class="list-group-item border-0 px-4 py-3 text-muted">No recent activity yet.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
-
-{% if team_summary %}
-    <div class="card shadow-sm premium-card mt-4">
-        <div class="card-header bg-white border-0 pb-0">
-            <span class="section-kicker">Teams</span>
-            <h2 class="section-title mb-1">Team summary</h2>
-            <p class="section-subtitle mb-0">A light operational view of how each support team is trending right now.</p>
-        </div>
-        <div class="table-responsive premium-table">
-            <table class="table align-middle mb-0">
-                <thead><tr><th>Team</th><th>Students</th><th>Urgent cases</th><th>Open requests</th></tr></thead>
-                <tbody>
-                    {% for team in team_summary %}
-                        <tr>
-                            <td>{{ team.support_team }}</td>
-                            <td>{{ team.student_total }}</td>
-                            <td>{{ team.urgent_total }}</td>
-                            <td>{{ team.open_requests }}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-{% endif %}
 {% endblock %}

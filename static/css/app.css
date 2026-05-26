@@ -47,6 +47,31 @@ body {
     color: #fff !important;
 }
 
+.nav-dropdown-menu {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    background: linear-gradient(180deg, rgba(16, 39, 61, 0.98), rgba(22, 52, 82, 0.97));
+    box-shadow: 0 18px 40px rgba(7, 20, 34, 0.24);
+    padding: 0.5rem;
+    min-width: 14rem;
+}
+
+.nav-dropdown-menu .dropdown-item {
+    color: rgba(255, 255, 255, 0.82);
+    border-radius: 0.75rem;
+    padding: 0.6rem 0.8rem;
+}
+
+.nav-dropdown-menu .dropdown-item:hover,
+.nav-dropdown-menu .dropdown-item:focus {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.nav-dropdown-menu .dropdown-divider {
+    border-top-color: rgba(255, 255, 255, 0.1);
+}
+
 .login-page {
     background:
         radial-gradient(circle at 20% 20%, rgba(112, 167, 226, 0.24), transparent 25%),
@@ -212,6 +237,10 @@ body {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
+}
+
+.dashboard-secondary-stats {
+    grid-template-columns: 1fr;
 }
 
 .mini-stat-card {

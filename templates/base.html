@@ -28,18 +28,41 @@
                             <li class="nav-item"><a class="nav-link" href="{% url 'portal_unavailable' %}">Portal Setup</a></li>
                         {% else %}
                             <li class="nav-item"><a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{% url 'student_list' %}">Students</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{% url 'request_list' %}">Requests</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{% url 'session_list' %}">Sessions</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{% url 'task_list' %}">Tasks</a></li>
-                            {% if role_flags.is_admin or role_flags.is_counsellor %}
-                                <li class="nav-item"><a class="nav-link" href="{% url 'team_access_requests' %}">Team Access</a></li>
-                            {% endif %}
-                            <li class="nav-item"><a class="nav-link" href="{% url 'communication_center' %}">Communications</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{% url 'reports' %}">Reports</a></li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">People</a>
+                                <ul class="dropdown-menu dropdown-menu-dark nav-dropdown-menu">
+                                    <li><a class="dropdown-item" href="{% url 'student_list' %}">Students</a></li>
+                                    {% if role_flags.is_admin or role_flags.is_counsellor %}
+                                        <li><a class="dropdown-item" href="{% url 'team_access_requests' %}">Team Access</a></li>
+                                    {% endif %}
+                                    {% if role_flags.is_admin %}
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="{% url 'user_management' %}">Users</a></li>
+                                    {% endif %}
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Operations</a>
+                                <ul class="dropdown-menu dropdown-menu-dark nav-dropdown-menu">
+                                    <li><a class="dropdown-item" href="{% url 'request_list' %}">Requests</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'session_list' %}">Sessions</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'task_list' %}">Tasks</a></li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Updates</a>
+                                <ul class="dropdown-menu dropdown-menu-dark nav-dropdown-menu">
+                                    <li><a class="dropdown-item" href="{% url 'communication_center' %}">Communications</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'reports' %}">Reports</a></li>
+                                </ul>
+                            </li>
                             {% if role_flags.is_admin %}
-                                <li class="nav-item"><a class="nav-link" href="{% url 'user_management' %}">Users</a></li>
-                                <li class="nav-item"><a class="nav-link" href="{% url 'admin_tools' %}">Admin Tools</a></li>
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
+                                    <ul class="dropdown-menu dropdown-menu-dark nav-dropdown-menu">
+                                        <li><a class="dropdown-item" href="{% url 'admin_tools' %}">Admin Tools</a></li>
+                                    </ul>
+                                </li>
                             {% endif %}
                         {% endif %}
                     </ul>
