@@ -102,6 +102,46 @@
     <div class="col-lg-5">
         <div class="card shadow-sm premium-card mb-4">
             <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Leadership</span>
+                <h2 class="section-title mb-1">Overdue reviews and workload</h2>
+            </div>
+            <div class="card-body">
+                <div class="status-panel subtle mb-4">
+                    <div class="status-label">Reviews past due</div>
+                    <div class="status-value">{{ overdue_reviews|length }} student review{{ overdue_reviews|length|pluralize }}</div>
+                    <div class="status-detail">These students have passed their next review date and should be checked soon.</div>
+                </div>
+                <div class="stacked-list mb-4">
+                    {% for student in overdue_reviews %}
+                        <div class="stacked-list-item">
+                            <div class="fw-semibold"><a href="{{ student.get_absolute_url }}">{{ student.full_name }}</a></div>
+                            <div class="small text-muted">{{ student.support_team|default:"No team" }} | Review due {{ student.next_review_date }}</div>
+                        </div>
+                    {% empty %}
+                        <div class="empty-state-copy">No student reviews are overdue right now.</div>
+                    {% endfor %}
+                </div>
+                <div class="table-responsive premium-table">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Counsellor</th><th>Students</th><th>Due reviews</th><th>Open tasks</th></tr></thead>
+                        <tbody>
+                            {% for counsellor in counsellor_workload %}
+                                <tr>
+                                    <td>{{ counsellor.get_full_name|default:counsellor.username }}</td>
+                                    <td>{{ counsellor.student_total }}</td>
+                                    <td>{{ counsellor.due_reviews }}</td>
+                                    <td>{{ counsellor.open_tasks }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="4" class="text-center text-muted py-3">No counsellor workload data yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="card shadow-sm premium-card mb-4">
+            <div class="card-header bg-white border-0 pb-0">
                 <span class="section-kicker">Requests</span>
                 <h2 class="section-title mb-1">Recent student requests</h2>
             </div>
@@ -153,4 +193,29 @@
         </div>
     </div>
 </div>
+
+{% if team_summary %}
+    <div class="card shadow-sm premium-card mt-4">
+        <div class="card-header bg-white border-0 pb-0">
+            <span class="section-kicker">Teams</span>
+            <h2 class="section-title mb-1">Team summary</h2>
+            <p class="section-subtitle mb-0">A light operational view of how each support team is trending right now.</p>
+        </div>
+        <div class="table-responsive premium-table">
+            <table class="table align-middle mb-0">
+                <thead><tr><th>Team</th><th>Students</th><th>Urgent cases</th><th>Open requests</th></tr></thead>
+                <tbody>
+                    {% for team in team_summary %}
+                        <tr>
+                            <td>{{ team.support_team }}</td>
+                            <td>{{ team.student_total }}</td>
+                            <td>{{ team.urgent_total }}</td>
+                            <td>{{ team.open_requests }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
 {% endblock %}

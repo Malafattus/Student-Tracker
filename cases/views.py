@@ -353,6 +353,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         students = student_queryset_for_user(self.request.user)
         tasks = FollowUpTask.objects.filter(student__in=students, is_closed=False).exclude(status=FollowUpTask.STATUS_DONE)
         documents = DocumentRequirement.objects.filter(student__in=students)
+        overdue_reviews = students.filter(next_review_date__lt=today).order_by("next_review_date", "full_name")
 
         context["stats"] = {
             "active_students": students.filter(is_active=True).count(),
@@ -381,8 +382,57 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             "application": students.filter(case_stage=Student.STAGE_APPLICATION).count(),
             "resolved": students.filter(case_stage=Student.STAGE_RESOLVED).count(),
         }
+        context["team_summary"] = list(
+            students.exclude(support_team="")
+            .values("support_team")
+            .annotate(
+                student_total=Count("id"),
+                urgent_total=Count("id", filter=Q(overall_risk_level="urgent")),
+                open_requests=Count(
+                    "requests",
+                    filter=Q(
+                        requests__status__in=[
+                            StudentRequest.STATUS_NEW,
+                            StudentRequest.STATUS_IN_REVIEW,
+                            StudentRequest.STATUS_APPROVED,
+                            StudentRequest.STATUS_SCHEDULED,
+                        ]
+                    ),
+                    distinct=True,
+                ),
+            )
+            .order_by("support_team")
+        )
+        context["counsellor_workload"] = (
+            User.objects.filter(groups__name="Counsellor")
+            .annotate(
+                student_total=Count(
+                    "assigned_students",
+                    filter=Q(assigned_students__in=students),
+                    distinct=True,
+                ),
+                due_reviews=Count(
+                    "assigned_students",
+                    filter=Q(assigned_students__in=overdue_reviews),
+                    distinct=True,
+                ),
+                open_tasks=Count(
+                    "tasks",
+                    filter=Q(
+                        tasks__student__in=students,
+                        tasks__is_closed=False,
+                        tasks__status__in=[FollowUpTask.STATUS_OPEN, FollowUpTask.STATUS_IN_PROGRESS],
+                    ),
+                    distinct=True,
+                ),
+            )
+            .order_by("-student_total", "first_name", "last_name")
+        )
+        context["overdue_reviews"] = overdue_reviews[:8]
         context["recent_students"] = students.order_by("-updated_at")[:8]
-        context["recent_requests"] = StudentRequest.objects.select_related("student").order_by("-created_at")[:6]
+        context["recent_requests"] = StudentRequest.objects.select_related("student").filter(
+            Q(student__in=students) | Q(student__isnull=True)
+        ).order_by("-created_at")[:6]
         context["recent_communications"] = CommunicationLog.objects.filter(student__in=students).select_related("student")[:6]
         context["recent_audit_logs"] = AuditLog.objects.filter(
             Q(model_name="Student") | Q(model_name="FollowUpTask") | Q(model_name="StudentNote")
@@ -1152,6 +1202,28 @@ class SessionListView(LoginRequiredMixin, ListView):
         return queryset.filter(is_closed=False).order_by("start_at")
 
     def post(self, request, *args, **kwargs):
+        if request.POST.get("request_id"):
+            request_item = get_object_or_404(
+                StudentRequest.objects.select_related("student"),
+                pk=request.POST.get("request_id"),
+                request_type=StudentRequest.REQUEST_COUNSELLING,
+            )
+            if not request_item.student or not can_edit_student(request.user, request_item.student):
+                messages.error(request, "You do not have permission to manage this counselling request.")
+                return redirect("session_list")
+            request_action = request.POST.get("request_action")
+            if request_action == "approve":
+                request_item.status = StudentRequest.STATUS_APPROVED
+                request_item.save(update_fields=["status", "updated_at"])
+                log_audit(request.user, "updated", request_item, {"section": "session_request_approved"})
+                messages.success(request, "Counselling request approved. You can now book a slot.")
+                return redirect("session_list")
+            if request_action == "decline":
+                request_item.status = StudentRequest.STATUS_DECLINED
+                request_item.save(update_fields=["status", "updated_at"])
+                log_audit(request.user, "updated", request_item, {"section": "session_request_declined"})
+                messages.success(request, "Counselling request declined.")
+                return redirect("session_list")
         session = get_object_or_404(session_queryset_for_user(request.user), pk=request.POST.get("session_id"))
         if not can_edit_student(request.user, session.student):
             messages.error(request, "You do not have permission to send reminders for this session.")

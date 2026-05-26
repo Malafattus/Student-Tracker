@@ -109,7 +109,7 @@
                 <div class="ops-section-head borderless">
                     <div>
                         <h2 class="ops-section-title">Pending counselling requests</h2>
-                        <p class="ops-section-copy">These still need a booked slot or a final staff decision.</p>
+                        <p class="ops-section-copy">These still need a decision or a booked slot. Approve them here when they are ready to move into the calendar.</p>
                     </div>
                 </div>
                 <div class="ops-section-body">
@@ -123,7 +123,16 @@
                                     </div>
                                     <div class="d-flex gap-2 flex-wrap">
                                         <a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Review</a>
-                                        <a class="btn btn-sm btn-primary" href="{% url 'session_create' %}?request={{ item.pk }}">Book slot</a>
+                                        {% if item.status == 'approved' %}
+                                            <a class="btn btn-sm btn-primary" href="{% url 'session_create' %}?request={{ item.pk }}">Book slot</a>
+                                        {% else %}
+                                            <form method="post" class="d-flex gap-2 flex-wrap">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="request_id" value="{{ item.pk }}">
+                                                <button class="btn btn-sm btn-primary" type="submit" name="request_action" value="approve">Accept</button>
+                                                <button class="btn btn-sm btn-outline-secondary" type="submit" name="request_action" value="decline">Decline</button>
+                                            </form>
+                                        {% endif %}
                                     </div>
                                 </div>
                             </div>

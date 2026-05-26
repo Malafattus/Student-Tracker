@@ -366,6 +366,44 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Book a Session")
 
+    def test_counsellor_can_accept_session_request_from_session_workspace(self):
+        request_item = StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_COUNSELLING,
+            title="Please book counselling",
+            details="I need to meet this week.",
+            status=StudentRequest.STATUS_IN_REVIEW,
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.post(reverse("session_list"), {"request_id": request_item.pk, "request_action": "approve"})
+        self.assertRedirects(response, reverse("session_list"))
+        request_item.refresh_from_db()
+        self.assertEqual(request_item.status, StudentRequest.STATUS_APPROVED)
+
+    def test_counsellor_can_decline_session_request_from_session_workspace(self):
+        request_item = StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_COUNSELLING,
+            title="Please book counselling",
+            details="I need to meet this week.",
+            status=StudentRequest.STATUS_NEW,
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.post(reverse("session_list"), {"request_id": request_item.pk, "request_action": "decline"})
+        self.assertRedirects(response, reverse("session_list"))
+        request_item.refresh_from_db()
+        self.assertEqual(request_item.status, StudentRequest.STATUS_DECLINED)
+
     def test_prepared_report_save_redirects_to_saved_report_page(self):
         client = Client()
         client.login(username="counsellor", password="pass12345")
