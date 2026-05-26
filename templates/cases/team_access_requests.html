@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Team Access | UIS Student Record System{% endblock %}
+{% block content %}
+<section class="ops-workspace">
+    <div class="ops-hero d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+        <div>
+            <span class="section-kicker">Team Access</span>
+            <h1 class="section-title mb-1">Keep counsellor visibility focused</h1>
+            <p class="section-subtitle mb-0">Counsellors mainly work within their own team. When a student needs cross-team support, request access here so admin can review it cleanly.</p>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            {% if role_flags.is_counsellor %}
+                <div class="card shadow-sm premium-card">
+                    <div class="card-header bg-white border-0 pb-0">
+                        <span class="section-kicker">Request Access</span>
+                        <h2 class="section-title h4 mb-1">Ask for another student</h2>
+                    </div>
+                    <div class="card-body">
+                        <form method="post">
+                            {% csrf_token %}
+                            {{ form.as_p }}
+                            <button class="btn btn-primary" type="submit">Send request to admin</button>
+                        </form>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+        <div class="col-lg-7">
+            {% if role_flags.is_admin %}
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-white"><h2 class="h5 mb-0">Pending admin review</h2></div>
+                    <div class="list-group list-group-flush">
+                        {% for request_item in pending_requests %}
+                            <div class="list-group-item">
+                                <div class="fw-semibold">{{ request_item.student.full_name }}</div>
+                                <div class="small text-muted mb-2">{{ request_item.counsellor.get_full_name|default:request_item.counsellor.username }} requested access</div>
+                                <div class="mb-3">{{ request_item.reason }}</div>
+                                <form method="post" class="d-flex flex-wrap gap-2">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="access_request_id" value="{{ request_item.pk }}">
+                                    <input type="text" name="review_note" class="form-control form-control-sm" placeholder="Optional note" style="max-width: 240px;">
+                                    <button class="btn btn-sm btn-primary" type="submit" name="decision" value="approve">Approve</button>
+                                    <button class="btn btn-sm btn-outline-secondary" type="submit" name="decision" value="decline">Decline</button>
+                                </form>
+                            </div>
+                        {% empty %}
+                            <div class="list-group-item text-muted">No access requests are waiting right now.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-white"><h2 class="h5 mb-0">Request history</h2></div>
+                <div class="table-responsive">
+                    <table class="table mb-0">
+                        <thead><tr><th>Student</th><th>Counsellor</th><th>Status</th><th>Updated</th></tr></thead>
+                        <tbody>
+                            {% for request_item in recent_requests %}
+                                <tr>
+                                    <td>{{ request_item.student.full_name }}</td>
+                                    <td>{{ request_item.counsellor.get_full_name|default:request_item.counsellor.username }}</td>
+                                    <td>{{ request_item.get_status_display }}</td>
+                                    <td>{{ request_item.updated_at|date:"M j, Y g:i A" }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="4" class="text-center text-muted py-4">No access requests yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

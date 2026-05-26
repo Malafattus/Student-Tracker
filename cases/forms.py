@@ -2,14 +2,17 @@ from django import forms
 from django.contrib.auth import authenticate
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import Group, User
+from django.db.models import Q
 
 from .models import (
     AcademicTerm,
     CommunicationLog,
     CommunicationTemplate,
+    CounsellorAccessRequest,
     CounsellingSession,
     DocumentRequirement,
     FollowUpTask,
+    ParentPortalAccess,
     PreparedReport,
     SessionChangeRequest,
     Student,
@@ -19,6 +22,7 @@ from .models import (
     StudentRequestResponse,
     StudentTermRecord,
     TermCourseEnrollment,
+    CounsellorProfile,
 )
 from .permissions import ROLE_NAMES, ensure_roles
 
@@ -82,6 +86,7 @@ class StudentForm(forms.ModelForm):
             "student_id",
             "grade",
             "nationality",
+            "support_team",
             "preferred_language",
             "assigned_counsellor",
             "agency",
@@ -178,6 +183,7 @@ class CommunicationLogForm(forms.ModelForm):
 class StudentFilterForm(forms.Form):
     assigned_counsellor = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
     grade = forms.CharField(required=False)
+    support_team = forms.CharField(required=False)
     case_stage = forms.ChoiceField(required=False, choices=[("", "All")] + Student.CASE_STAGE_CHOICES)
     risk_level = forms.ChoiceField(required=False, choices=[("", "All")] + Student.RISK_LEVEL_CHOICES)
     payment_status = forms.ChoiceField(required=False, choices=[("", "All")] + Student.PAYMENT_STATUS_CHOICES)
@@ -195,6 +201,10 @@ class StudentFilterForm(forms.Form):
 
 class UserManagementForm(forms.ModelForm):
     role = forms.ChoiceField(choices=[(name, name) for name in ROLE_NAMES])
+    primary_team = forms.CharField(
+        required=False,
+        help_text="Used for counsellor visibility. Example: Korean Team.",
+    )
     password = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=True),
@@ -211,6 +221,9 @@ class UserManagementForm(forms.ModelForm):
         if self.instance.pk:
             group = self.instance.groups.first()
             self.fields["role"].initial = group.name if group else ROLE_NAMES[2]
+            profile = getattr(self.instance, "counsellor_profile", None)
+            if profile:
+                self.fields["primary_team"].initial = profile.primary_team
         apply_bootstrap_classes(self)
 
     def clean_password(self):
@@ -228,6 +241,16 @@ class UserManagementForm(forms.ModelForm):
             user.save()
             user.groups.clear()
             user.groups.add(Group.objects.get(name=self.cleaned_data["role"]))
+            profile = getattr(user, "counsellor_profile", None)
+            if self.cleaned_data["role"] == "Counsellor":
+                if profile:
+                    profile.primary_team = self.cleaned_data.get("primary_team", "")
+                    profile.save(update_fields=["primary_team", "updated_at"])
+                else:
+                    CounsellorProfile.objects.create(user=user, primary_team=self.cleaned_data.get("primary_team", ""))
+            elif profile and profile.primary_team:
+                profile.primary_team = ""
+                profile.save(update_fields=["primary_team", "updated_at"])
         return user
 
 
@@ -281,6 +304,91 @@ class StudentPortalAccessForm(forms.Form):
                 is_active=self.cleaned_data["is_active"],
             )
         return access
+
+
+class ParentPortalAccessForm(forms.Form):
+    existing_parent_account = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
+    username = forms.CharField(max_length=150, required=False)
+    email = forms.EmailField(required=False)
+    password = forms.CharField(required=False, widget=forms.PasswordInput(render_value=True))
+    relationship_label = forms.ChoiceField(choices=ParentPortalAccess.RELATIONSHIP_CHOICES)
+    is_active = forms.BooleanField(required=False, initial=True)
+
+    def __init__(self, *args, student=None, **kwargs):
+        self.student = student
+        super().__init__(*args, **kwargs)
+        self.fields["existing_parent_account"].queryset = User.objects.filter(groups__name="Parent").distinct().order_by(
+            "username"
+        )
+        apply_bootstrap_classes(self)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        existing_account = cleaned_data.get("existing_parent_account")
+        if existing_account:
+            return cleaned_data
+        if not cleaned_data.get("username"):
+            self.add_error("username", "Enter a username or choose an existing parent account.")
+        if not cleaned_data.get("email"):
+            self.add_error("email", "Enter an email address or choose an existing parent account.")
+        if not cleaned_data.get("password"):
+            self.add_error("password", "Enter a password for the new parent login.")
+        return cleaned_data
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username")
+        if not username:
+            return username
+        if User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError("That username is already in use.")
+        return username
+
+    def save(self):
+        existing_account = self.cleaned_data.get("existing_parent_account")
+        if existing_account:
+            user = existing_account
+            user.groups.add(Group.objects.get(name="Parent"))
+        else:
+            user = User.objects.create_user(
+                username=self.cleaned_data["username"],
+                email=self.cleaned_data["email"],
+                password=self.cleaned_data["password"],
+                first_name=self.student.parent_guardian_name.split(" ")[0] if self.student.parent_guardian_name else "",
+                last_name=" ".join(self.student.parent_guardian_name.split(" ")[1:]) if self.student.parent_guardian_name else "",
+                is_active=self.cleaned_data.get("is_active", True),
+            )
+            user.groups.add(Group.objects.get(name="Parent"))
+        access, _ = ParentPortalAccess.objects.update_or_create(
+            student=self.student,
+            user=user,
+            defaults={
+                "relationship_label": self.cleaned_data["relationship_label"],
+                "is_active": self.cleaned_data.get("is_active", True),
+            },
+        )
+        return access
+
+
+class CounsellorAccessRequestForm(forms.ModelForm):
+    class Meta:
+        model = CounsellorAccessRequest
+        fields = ["student", "reason"]
+        widgets = {"reason": forms.Textarea(attrs={"rows": 4})}
+
+    def __init__(self, *args, counsellor=None, **kwargs):
+        self.counsellor = counsellor
+        super().__init__(*args, **kwargs)
+        queryset = Student.objects.all().order_by("full_name")
+        if counsellor is not None:
+            counsellor_team = getattr(getattr(counsellor, "counsellor_profile", None), "primary_team", "")
+            queryset = queryset.exclude(assigned_counsellor=counsellor).exclude(
+                extra_counsellor_access__counsellor=counsellor,
+                extra_counsellor_access__is_active=True,
+            )
+            if counsellor_team:
+                queryset = queryset.exclude(support_team__iexact=counsellor_team)
+        self.fields["student"].queryset = queryset.distinct()
+        apply_bootstrap_classes(self)
 
 
 class StudentRequestPublicForm(forms.ModelForm):
@@ -363,6 +471,33 @@ class StudentRequestStaffForm(forms.ModelForm):
 
 
 class CounsellingSessionForm(forms.ModelForm):
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+        self.fields["counsellor"].queryset = User.objects.filter(groups__name__in=["Admin", "Counsellor"]).distinct()
+        linked_request_queryset = StudentRequest.objects.exclude(status=StudentRequest.STATUS_CLOSED)
+        if user is not None:
+            from .permissions import is_admin, is_counsellor
+
+            if is_admin(user):
+                self.fields["student"].queryset = Student.objects.select_related("assigned_counsellor").all()
+            elif is_counsellor(user):
+                team_name = getattr(getattr(user, "counsellor_profile", None), "primary_team", "")
+                counsellor_filters = Q(assigned_counsellor=user) | Q(
+                    extra_counsellor_access__counsellor=user,
+                    extra_counsellor_access__is_active=True,
+                )
+                if team_name:
+                    counsellor_filters |= Q(support_team__iexact=team_name)
+                self.fields["student"].queryset = Student.objects.select_related("assigned_counsellor").filter(
+                    counsellor_filters
+                ).distinct()
+                linked_request_queryset = linked_request_queryset.filter(
+                    Q(student__in=self.fields["student"].queryset) | Q(student__isnull=True, assigned_to=user)
+                )
+        self.fields["linked_request"].queryset = linked_request_queryset.distinct()
+        apply_bootstrap_classes(self)
+
     class Meta:
         model = CounsellingSession
         fields = [
@@ -384,18 +519,16 @@ class CounsellingSessionForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["counsellor"].queryset = User.objects.filter(groups__name__in=["Admin", "Counsellor"]).distinct()
-        self.fields["linked_request"].queryset = StudentRequest.objects.exclude(status=StudentRequest.STATUS_CLOSED)
-        apply_bootstrap_classes(self)
-
     def clean(self):
         cleaned = super().clean()
         start_at = cleaned.get("start_at")
         end_at = cleaned.get("end_at")
         if start_at and end_at and end_at <= start_at:
             self.add_error("end_at", "End time must be after the start time.")
+        linked_request = cleaned.get("linked_request")
+        student = cleaned.get("student")
+        if linked_request and student and linked_request.student and linked_request.student_id != student.id:
+            self.add_error("linked_request", "This request belongs to a different student.")
         return cleaned
 
 

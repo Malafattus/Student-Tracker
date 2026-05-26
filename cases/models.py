@@ -104,6 +104,7 @@ class Student(TimeStampedModel):
     student_id = models.CharField(max_length=50, unique=True)
     grade = models.CharField(max_length=20)
     nationality = models.CharField(max_length=100)
+    support_team = models.CharField(max_length=100, blank=True)
     preferred_language = models.CharField(max_length=100, blank=True)
     assigned_counsellor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -152,7 +153,21 @@ class Student(TimeStampedModel):
             emails.append(self.parent_guardian_email)
         if hasattr(self, "portal_access") and self.portal_access.user.email:
             emails.append(self.portal_access.user.email)
+        for parent_access in self.parent_access_links.select_related("user").filter(is_active=True):
+            if parent_access.user.email:
+                emails.append(parent_access.user.email)
         return emails
+
+
+class CounsellorProfile(TimeStampedModel):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="counsellor_profile")
+    primary_team = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["user__first_name", "user__last_name", "user__username"]
+
+    def __str__(self):
+        return self.user.get_full_name() or self.user.username
 
 
 class AcademicTerm(TimeStampedModel):
@@ -655,6 +670,98 @@ class StudentPortalAccess(TimeStampedModel):
 
     def __str__(self):
         return f"{self.student.full_name} portal access"
+
+
+class ParentPortalAccess(TimeStampedModel):
+    RELATIONSHIP_PARENT = "parent"
+    RELATIONSHIP_GUARDIAN = "guardian"
+    RELATIONSHIP_AGENT = "agent"
+    RELATIONSHIP_OTHER = "other"
+    RELATIONSHIP_CHOICES = [
+        (RELATIONSHIP_PARENT, "Parent"),
+        (RELATIONSHIP_GUARDIAN, "Guardian"),
+        (RELATIONSHIP_AGENT, "Agent"),
+        (RELATIONSHIP_OTHER, "Other"),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="parent_access_links")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="parent_portal_links")
+    relationship_label = models.CharField(max_length=20, choices=RELATIONSHIP_CHOICES, default=RELATIONSHIP_PARENT)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["student__full_name", "user__username"]
+        unique_together = ["student", "user"]
+        verbose_name = "Parent portal access"
+        verbose_name_plural = "Parent portal access"
+
+    def __str__(self):
+        return f"{self.user.get_full_name() or self.user.username} -> {self.student.full_name}"
+
+
+class CounsellorStudentAccess(TimeStampedModel):
+    counsellor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="granted_student_access",
+    )
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="extra_counsellor_access")
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="granted_counsellor_student_access",
+    )
+    reason = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["student__full_name"]
+        unique_together = ["counsellor", "student"]
+        verbose_name = "Counsellor extra access"
+        verbose_name_plural = "Counsellor extra access"
+
+    def __str__(self):
+        return f"{self.counsellor} -> {self.student}"
+
+
+class CounsellorAccessRequest(TimeStampedModel):
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_DECLINED = "declined"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_DECLINED, "Declined"),
+    ]
+
+    counsellor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="requested_student_access",
+    )
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="access_requests")
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_counsellor_access_requests",
+    )
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+    review_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["status", "-created_at"]
+        unique_together = ["counsellor", "student", "status"]
+        verbose_name = "Counsellor access request"
+        verbose_name_plural = "Counsellor access requests"
+
+    def __str__(self):
+        return f"{self.counsellor} requesting {self.student}"
 
 
 class AuditLog(models.Model):

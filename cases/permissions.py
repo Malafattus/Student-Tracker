@@ -6,7 +6,8 @@ ROLE_ADMIN = "Admin"
 ROLE_COUNSELLOR = "Counsellor"
 ROLE_VIEWER = "Viewer"
 ROLE_STUDENT = "Student"
-ROLE_NAMES = [ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_VIEWER, ROLE_STUDENT]
+ROLE_PARENT = "Parent"
+ROLE_NAMES = [ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_VIEWER, ROLE_STUDENT, ROLE_PARENT]
 
 
 def ensure_roles():
@@ -38,6 +39,10 @@ def is_student(user):
     return user_has_role(user, ROLE_STUDENT)
 
 
+def is_parent(user):
+    return user_has_role(user, ROLE_PARENT)
+
+
 def get_portal_student(user):
     if not is_student(user):
         return None
@@ -51,12 +56,56 @@ def has_active_student_portal(user):
     return get_portal_student(user) is not None
 
 
+def get_parent_students(user):
+    if not is_parent(user):
+        return []
+    return [link.student for link in user.parent_portal_links.select_related("student").filter(is_active=True)]
+
+
+def has_active_parent_portal(user):
+    return bool(get_parent_students(user))
+
+
+def normalized_team_name(value):
+    return (value or "").strip().casefold()
+
+
+def counsellor_primary_team(user):
+    profile = getattr(user, "counsellor_profile", None)
+    if not profile:
+        return ""
+    return profile.primary_team
+
+
+def counsellor_has_granted_student_access(user, student):
+    if not is_counsellor(user):
+        return False
+    return student.extra_counsellor_access.filter(counsellor=user, is_active=True).exists()
+
+
+def counsellor_can_access_student(user, student):
+    if not is_counsellor(user):
+        return False
+    if student.assigned_counsellor_id == user.id:
+        return True
+    if counsellor_has_granted_student_access(user, student):
+        return True
+    return normalized_team_name(student.support_team) and normalized_team_name(student.support_team) == normalized_team_name(
+        counsellor_primary_team(user)
+    )
+
+
 def can_view_student(user, student):
     if not user.is_authenticated:
         return False
     if is_admin(user) or is_viewer(user):
         return True
-    return student.assigned_counsellor_id == user.id or is_counsellor(user)
+    if is_parent(user):
+        return any(child.pk == student.pk for child in get_parent_students(user))
+    if has_active_student_portal(user):
+        portal_student = get_portal_student(user)
+        return bool(portal_student and portal_student.pk == student.pk)
+    return counsellor_can_access_student(user, student)
 
 
 def can_edit_student(user, student):
@@ -64,7 +113,7 @@ def can_edit_student(user, student):
         return False
     if is_admin(user):
         return True
-    return is_counsellor(user) and student.assigned_counsellor_id == user.id
+    return counsellor_can_access_student(user, student)
 
 
 def require_admin(user):

@@ -7,8 +7,9 @@
         <p class="text-muted mb-0">{{ student.student_id }} | Grade {{ student.grade }} | {{ student.nationality }}</p>
     </div>
     <div class="d-flex gap-2">
-        {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+        {% if can_manage_student %}
             <a class="btn btn-outline-primary" href="{% url 'student_portal_access' student.pk %}">Portal Access</a>
+            <a class="btn btn-outline-primary" href="{% url 'parent_portal_access' student.pk %}">Parent Access</a>
             <a class="btn btn-primary" href="{% url 'student_update' student.pk %}">Edit Student</a>
         {% endif %}
     </div>
@@ -109,6 +110,7 @@
     <div class="row g-4">
         <div class="col-lg-6"><div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Case overview</h2></div><div class="card-body detail-grid">
             <div><strong>Assigned counsellor:</strong> {{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</div>
+            <div><strong>Support team:</strong> {{ student.support_team|default:"Not set" }}</div>
             <div><strong>Case stage:</strong> {{ student.get_case_stage_display }}</div>
             <div><strong>Next review date:</strong> {{ student.next_review_date|default:"-" }}</div>
             <div><strong>Agency:</strong> {{ student.agency|default:"-" }}</div>
@@ -130,6 +132,13 @@
             <p><strong>Parent/guardian:</strong> {{ student.parent_guardian_name|default:"-" }}</p>
             <p><strong>Email:</strong> {{ student.parent_guardian_email|default:"-" }}</p>
             <p><strong>Phone:</strong> {{ student.parent_guardian_phone|default:"-" }}</p>
+            <p><strong>Parent portal access:</strong>
+                {% for link in parent_access_links %}
+                    {{ link.user.get_full_name|default:link.user.username }}{% if not link.is_active %} (inactive){% endif %}{% if not forloop.last %}, {% endif %}
+                {% empty %}
+                    No parent portal linked yet.
+                {% endfor %}
+            </p>
             <p><strong>IELTS/English status:</strong> {{ student.ielts_english_status|default:"-" }}</p>
             <p><strong>Attendance concerns:</strong><br>{{ student.attendance_concerns|default:"No concerns recorded." }}</p>
             <p class="mb-0"><strong>Internal summary:</strong><br>{{ student.internal_summary|default:"No summary yet." }}</p>
@@ -138,7 +147,7 @@
 {% elif active_tab == 'notes' %}
     <div class="row g-4">
         <div class="col-lg-5">
-            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+            {% if can_manage_student %}
                 <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Add note</h2></div><div class="card-body">
                     <form method="post" action="{% url 'student_note_add' student.pk %}">
                         {% csrf_token %}
@@ -165,7 +174,7 @@
 {% elif active_tab == 'tasks' %}
     <div class="row g-4">
         <div class="col-lg-5">
-            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+            {% if can_manage_student %}
                 <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Create task</h2></div><div class="card-body">
                     <form method="post" action="{% url 'student_task_add' student.pk %}">
                         {% csrf_token %}
@@ -205,7 +214,7 @@
 {% elif active_tab == 'requests' %}
     <div class="row g-4">
         <div class="col-lg-5">
-            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+            {% if can_manage_student %}
                 <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Log request</h2></div><div class="card-body">
                     <form method="post" action="{% url 'student_request_add' student.pk %}">
                         {% csrf_token %}
@@ -257,7 +266,7 @@
 {% elif active_tab == 'sessions' %}
     <div class="row g-4">
         <div class="col-lg-5">
-            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+            {% if can_manage_student %}
                 <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Book session</h2></div><div class="card-body">
                     <form method="get" action="{% url 'session_create' %}">
                         <input type="hidden" name="student" value="{{ student.id }}">
@@ -306,7 +315,7 @@
 {% elif active_tab == 'documents' %}
     <div class="row g-4">
         <div class="col-lg-5">
-            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+            {% if can_manage_student %}
                 <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Add document item</h2></div><div class="card-body">
                     <form method="post" action="{% url 'student_document_add' student.pk %}">
                         {% csrf_token %}
@@ -334,7 +343,7 @@
 {% elif active_tab == 'communication' %}
     <div class="row g-4">
         <div class="col-lg-5">
-            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+            {% if can_manage_student %}
                 <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Add communication log</h2></div><div class="card-body">
                     <form method="post" action="{% url 'student_communication_add' student.pk %}">
                         {% csrf_token %}
@@ -363,7 +372,7 @@
 {% elif active_tab == 'terms' %}
     <div class="row g-4">
         <div class="col-lg-5">
-            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+            {% if can_manage_student %}
                 <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Add term record</h2></div><div class="card-body">
                     <form method="post" action="{% url 'student_term_add' student.pk %}">
                         {% csrf_token %}
@@ -401,7 +410,7 @@
                                 </tbody>
                             </table>
                         </div>
-                        {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+                        {% if can_manage_student %}
                             <form method="post" action="{% url 'student_term_course_add' student.pk record.pk %}">
                                 {% csrf_token %}
                                 <div class="row g-3">
@@ -425,7 +434,7 @@
 {% elif active_tab == 'reports' %}
     <div class="row g-4">
         <div class="col-lg-5">
-            {% if role_flags.is_admin or request.user == student.assigned_counsellor %}
+            {% if can_manage_student %}
                 <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Prepare report</h2></div><div class="card-body">
                     <form method="post" action="{% url 'student_report_add' student.pk %}" enctype="multipart/form-data">
                         {% csrf_token %}

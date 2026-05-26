@@ -29,13 +29,14 @@
 <div class="card shadow-sm">
     <div class="table-responsive">
         <table class="table table-hover mb-0 align-middle">
-            <thead><tr><th>Name</th><th>ID</th><th>Grade</th><th>Case stage</th><th>Counsellor</th><th>Application</th><th>Risk</th><th>Review</th><th>Missing docs</th></tr></thead>
+            <thead><tr><th>Name</th><th>ID</th><th>Grade</th><th>Team</th><th>Case stage</th><th>Counsellor</th><th>Application</th><th>Risk</th><th>Review</th><th>Missing docs</th></tr></thead>
             <tbody>
                 {% for student in students %}
                     <tr>
                         <td><a href="{{ student.get_absolute_url }}">{{ student.full_name }}</a></td>
                         <td>{{ student.student_id }}</td>
                         <td>{{ student.grade }}</td>
+                        <td>{{ student.support_team|default:"-" }}</td>
                         <td>{{ student.get_case_stage_display }}</td>
                         <td>{{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</td>
                         <td>{{ student.get_university_application_status_display }}</td>
@@ -44,7 +45,7 @@
                         <td>{{ student.missing_docs_count }}</td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="9" class="text-center text-muted py-5">No students match the current filters.</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted py-5">No students match the current filters.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

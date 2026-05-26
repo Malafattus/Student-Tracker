@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Parent Access | UIS Student Record System{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xl-8">
+        <div class="card shadow-sm premium-card">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Parent Portal</span>
+                <h1 class="section-title mb-1">Manage family access for {{ student.full_name }}</h1>
+                <p class="section-subtitle mb-0">Use an existing parent account for siblings, or create a new family login here.</p>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        {% for field in form %}
+                            <div class="{% if field.name == 'password' %}col-md-6{% else %}col-12{% endif %}">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                                {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex gap-2 mt-4">
+                        <button class="btn btn-primary" type="submit">Save parent access</button>
+                        <a class="btn btn-outline-secondary" href="{{ student.get_absolute_url }}">Back to student</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Linked family accounts</h2></div>
+            <div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Login</th><th>Email</th><th>Relationship</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for link in links %}
+                            <tr>
+                                <td>{{ link.user.username }}</td>
+                                <td>{{ link.user.email|default:"-" }}</td>
+                                <td>{{ link.get_relationship_label_display }}</td>
+                                <td>{% if link.is_active %}Active{% else %}Inactive{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-4">No parent accounts linked yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

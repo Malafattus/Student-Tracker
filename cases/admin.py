@@ -5,9 +5,13 @@ from .models import (
     AuditLog,
     CommunicationLog,
     CommunicationTemplate,
+    CounsellorAccessRequest,
+    CounsellorProfile,
+    CounsellorStudentAccess,
     CounsellingSession,
     DocumentRequirement,
     FollowUpTask,
+    ParentPortalAccess,
     PreparedReport,
     SessionChangeRequest,
     Student,
@@ -23,8 +27,8 @@ from .models import (
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ("full_name", "student_id", "grade", "assigned_counsellor", "overall_risk_level", "payment_status")
-    list_filter = ("grade", "overall_risk_level", "payment_status", "homestay_status")
+    list_display = ("full_name", "student_id", "grade", "support_team", "assigned_counsellor", "overall_risk_level", "payment_status")
+    list_filter = ("grade", "support_team", "overall_risk_level", "payment_status", "homestay_status")
     search_fields = ("full_name", "student_id", "parent_guardian_email")
 
 
@@ -44,3 +48,7 @@ admin.site.register(StudentPortalAccess)
 admin.site.register(StudentTermRecord)
 admin.site.register(TermCourseEnrollment)
 admin.site.register(PreparedReport)
+admin.site.register(CounsellorProfile)
+admin.site.register(ParentPortalAccess)
+admin.site.register(CounsellorStudentAccess)
+admin.site.register(CounsellorAccessRequest)

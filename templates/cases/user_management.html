@@ -3,7 +3,7 @@
 {% block content %}
 <div class="mb-4">
     <h1 class="h3 mb-1">Admin User Management</h1>
-    <p class="text-muted mb-0">Create and maintain Admin, Counsellor, and Viewer accounts.</p>
+    <p class="text-muted mb-0">Create and maintain Admin, Counsellor, Parent, and Viewer accounts. Counsellors can also be anchored to a team here.</p>
 </div>
 <div class="row g-4">
     <div class="col-lg-5">
@@ -23,7 +23,7 @@
             <div class="card-header bg-white"><h2 class="h5 mb-0">Existing users</h2></div>
             <div class="table-responsive">
                 <table class="table mb-0">
-                    <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th></th></tr></thead>
+                    <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Team</th><th></th></tr></thead>
                     <tbody>
                         {% for user in users %}
                             <tr>
@@ -31,6 +31,7 @@
                                 <td>{{ user.username }}</td>
                                 <td>{{ user.email }}</td>
                                 <td>{{ user.groups.first.name|default:"-" }}</td>
+                                <td>{{ user.counsellor_profile.primary_team|default:"-" }}</td>
                                 <td><a class="btn btn-sm btn-outline-primary" href="{% url 'user_update' user.pk %}">Edit</a></td>
                             </tr>
                         {% endfor %}

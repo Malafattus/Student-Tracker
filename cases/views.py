@@ -21,6 +21,7 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 from .audit import log_audit
 from .forms import (
     CommunicationTemplateForm,
+    CounsellorAccessRequestForm,
     PreparedReportForm,
     CounsellingSessionForm,
     CommunicationLogForm,
@@ -29,6 +30,7 @@ from .forms import (
     LoginIDAuthenticationForm,
     RequestTaskForm,
     SessionChangeRequestForm,
+    ParentPortalAccessForm,
     StudentPortalRequestForm,
     StudentRequestPublicForm,
     StudentRequestResponseForm,
@@ -46,9 +48,12 @@ from .models import (
     AuditLog,
     CommunicationLog,
     CommunicationTemplate,
+    CounsellorAccessRequest,
+    CounsellorStudentAccess,
     CounsellingSession,
     DocumentRequirement,
     FollowUpTask,
+    ParentPortalAccess,
     PreparedReport,
     SessionChangeRequest,
     Student,
@@ -70,10 +75,14 @@ from .notifications import (
 from .permissions import (
     can_edit_student,
     can_view_student,
+    counsellor_primary_team,
     get_portal_student,
+    get_parent_students,
+    has_active_parent_portal,
     has_active_student_portal,
     is_admin,
     is_counsellor,
+    is_parent,
     is_student,
     require_admin,
 )
@@ -81,6 +90,10 @@ from .permissions import (
 
 def current_student_for_user(user):
     return get_portal_student(user)
+
+
+def current_parent_students_for_user(user):
+    return get_parent_students(user)
 
 
 def redirect_student_to_portal(request):
@@ -91,6 +104,21 @@ def redirect_student_to_portal(request):
     return None
 
 
+def redirect_parent_to_portal(request):
+    if has_active_parent_portal(request.user):
+        return redirect("parent_dashboard")
+    if is_parent(request.user):
+        return redirect("parent_unavailable")
+    return None
+
+
+def redirect_portal_user(request):
+    parent_redirect = redirect_parent_to_portal(request)
+    if parent_redirect:
+        return parent_redirect
+    return redirect_student_to_portal(request)
+
+
 class RoleAwareLoginView(auth_views.LoginView):
     authentication_form = LoginIDAuthenticationForm
     template_name = "registration/login.html"
@@ -99,6 +127,10 @@ class RoleAwareLoginView(auth_views.LoginView):
         student = current_student_for_user(self.request.user)
         if student:
             return reverse("portal_dashboard")
+        if has_active_parent_portal(self.request.user):
+            return reverse("parent_dashboard")
+        if is_parent(self.request.user):
+            return reverse("parent_unavailable")
         if is_student(self.request.user):
             return reverse("portal_unavailable")
         return super().get_success_url()
@@ -109,12 +141,17 @@ def student_queryset_for_user(user):
     student = current_student_for_user(user)
     if student:
         return qs.filter(pk=student.pk)
+    parent_students = current_parent_students_for_user(user)
+    if parent_students:
+        return qs.filter(pk__in=[student.pk for student in parent_students])
     if is_admin(user) or user.is_superuser or user.groups.filter(name="Viewer").exists():
         return qs
     if is_counsellor(user):
-        # Counsellors can view the wider case list, but editing is still
-        # restricted by can_edit_student to records assigned to them.
-        return qs
+        team_name = (counsellor_primary_team(user) or "").strip()
+        counsellor_filters = Q(assigned_counsellor=user) | Q(extra_counsellor_access__counsellor=user, extra_counsellor_access__is_active=True)
+        if team_name:
+            counsellor_filters |= Q(support_team__iexact=team_name)
+        return qs.filter(counsellor_filters).distinct()
     return qs.none()
 
 
@@ -305,7 +342,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = "cases/dashboard.html"
 
     def dispatch(self, request, *args, **kwargs):
-        portal_redirect = redirect_student_to_portal(request)
+        portal_redirect = redirect_portal_user(request)
         if portal_redirect:
             return portal_redirect
         return super().dispatch(request, *args, **kwargs)
@@ -410,6 +447,72 @@ class PortalUnavailableView(LoginRequiredMixin, TemplateView):
         return super().dispatch(request, *args, **kwargs)
 
 
+class ParentDashboardView(LoginRequiredMixin, TemplateView):
+    template_name = "cases/parent_dashboard.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not has_active_parent_portal(request.user):
+            messages.error(request, "Parent portal access is not enabled for this account.")
+            return redirect("dashboard")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        students = (
+            student_queryset_for_user(self.request.user)
+            .prefetch_related("documents", "requests__attachments", "requests__responses", "sessions", "term_records__term", "term_records__courses")
+            .order_by("full_name")
+        )
+        family_records = []
+        for student in students:
+            requests = student.requests.exclude(status=StudentRequest.STATUS_CLOSED).order_by("-created_at")
+            sessions = student.sessions.filter(is_closed=False).order_by("start_at")
+            family_records.append(
+                {
+                    "student": student,
+                    "requests": requests[:5],
+                    "sessions": sessions[:5],
+                    "next_session": sessions.filter(start_at__gte=timezone.now()).first(),
+                    "missing_documents": student.documents.filter(status="missing"),
+                    "term_records": student.term_records.all()[:3],
+                    "reports": student.prepared_reports.filter(is_closed=False).order_by("-created_at")[:3],
+                    "portal_links": student.parent_access_links.filter(user=self.request.user, is_active=True),
+                }
+            )
+        context["family_records"] = family_records
+        context["family_summary"] = {
+            "student_total": students.count(),
+            "open_requests": StudentRequest.objects.filter(
+                student__in=students,
+                status__in=[
+                    StudentRequest.STATUS_NEW,
+                    StudentRequest.STATUS_IN_REVIEW,
+                    StudentRequest.STATUS_APPROVED,
+                    StudentRequest.STATUS_SCHEDULED,
+                ],
+            ).count(),
+            "upcoming_sessions": CounsellingSession.objects.filter(
+                student__in=students,
+                is_closed=False,
+                status=CounsellingSession.STATUS_SCHEDULED,
+                start_at__gte=timezone.now(),
+            ).count(),
+            "missing_documents": DocumentRequirement.objects.filter(student__in=students, status="missing").count(),
+        }
+        return context
+
+
+class ParentUnavailableView(LoginRequiredMixin, TemplateView):
+    template_name = "cases/parent_unavailable.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if has_active_parent_portal(request.user):
+            return redirect("parent_dashboard")
+        if not is_parent(request.user):
+            return redirect("dashboard")
+        return super().dispatch(request, *args, **kwargs)
+
+
 class StudentListView(LoginRequiredMixin, ListView):
     model = Student
     template_name = "cases/student_list.html"
@@ -417,7 +520,7 @@ class StudentListView(LoginRequiredMixin, ListView):
     paginate_by = 25
 
     def dispatch(self, request, *args, **kwargs):
-        portal_redirect = redirect_student_to_portal(request)
+        portal_redirect = redirect_portal_user(request)
         if portal_redirect:
             return portal_redirect
         return super().dispatch(request, *args, **kwargs)
@@ -433,6 +536,8 @@ class StudentListView(LoginRequiredMixin, ListView):
                 queryset = queryset.filter(assigned_counsellor=data["assigned_counsellor"])
             if data.get("grade"):
                 queryset = queryset.filter(grade__icontains=data["grade"])
+            if data.get("support_team"):
+                queryset = queryset.filter(support_team__icontains=data["support_team"])
             if data.get("case_stage"):
                 queryset = queryset.filter(case_stage=data["case_stage"])
             if data.get("risk_level"):
@@ -467,6 +572,8 @@ class StudentCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         if is_counsellor(self.request.user) and not form.cleaned_data.get("assigned_counsellor"):
             form.instance.assigned_counsellor = self.request.user
+        if is_counsellor(self.request.user) and not form.cleaned_data.get("support_team"):
+            form.instance.support_team = counsellor_primary_team(self.request.user)
         response = super().form_valid(form)
         log_audit(self.request.user, "created", self.object, {"section": "student"})
         messages.success(self.request, "Student record created successfully.")
@@ -498,7 +605,7 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "student"
 
     def dispatch(self, request, *args, **kwargs):
-        portal_redirect = redirect_student_to_portal(request)
+        portal_redirect = redirect_portal_user(request)
         if portal_redirect:
             return portal_redirect
         return super().dispatch(request, *args, **kwargs)
@@ -525,6 +632,7 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
         urgent_tasks = active_tasks.filter(status__in=[FollowUpTask.STATUS_OPEN, FollowUpTask.STATUS_IN_PROGRESS]).order_by("due_date")[:3]
         missing_documents = self.object.documents.filter(status="missing")
         context["active_tab"] = self.request.GET.get("tab", "overview")
+        context["can_manage_student"] = can_edit_student(self.request.user, self.object)
         context["note_form"] = StudentNoteForm()
         context["task_form"] = FollowUpTaskForm()
         context["document_form"] = DocumentRequirementForm()
@@ -568,6 +676,8 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
         context["upcoming_session"] = upcoming_session
         context["urgent_tasks"] = urgent_tasks
         context["missing_documents"] = missing_documents
+        context["parent_access_links"] = self.object.parent_access_links.select_related("user")
+        context["pending_access_requests"] = self.object.access_requests.filter(status=CounsellorAccessRequest.STATUS_PENDING)
         context["student_actions"] = [
             {
                 "title": "Log a request",
@@ -593,6 +703,11 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
                 "label": "Case stage",
                 "value": self.object.get_case_stage_display(),
                 "detail": f"Next review {self.object.next_review_date:%b %d, %Y}" if self.object.next_review_date else "No review date set yet",
+            },
+            {
+                "label": "Support team",
+                "value": self.object.support_team or "Not set",
+                "detail": "Used to keep counsellor access focused and manageable.",
             },
             {
                 "label": "Open requests",
@@ -694,7 +809,7 @@ class TaskListView(LoginRequiredMixin, ListView):
     paginate_by = 30
 
     def dispatch(self, request, *args, **kwargs):
-        portal_redirect = redirect_student_to_portal(request)
+        portal_redirect = redirect_portal_user(request)
         if portal_redirect:
             return portal_redirect
         return super().dispatch(request, *args, **kwargs)
@@ -794,7 +909,7 @@ class StudentRequestListView(LoginRequiredMixin, ListView):
     paginate_by = 30
 
     def dispatch(self, request, *args, **kwargs):
-        portal_redirect = redirect_student_to_portal(request)
+        portal_redirect = redirect_portal_user(request)
         if portal_redirect:
             return portal_redirect
         return super().dispatch(request, *args, **kwargs)
@@ -1019,7 +1134,7 @@ class SessionListView(LoginRequiredMixin, ListView):
     paginate_by = 40
 
     def dispatch(self, request, *args, **kwargs):
-        portal_redirect = redirect_student_to_portal(request)
+        portal_redirect = redirect_portal_user(request)
         if portal_redirect:
             return portal_redirect
         return super().dispatch(request, *args, **kwargs)
@@ -1144,11 +1259,17 @@ class SessionCreateView(LoginRequiredMixin, CreateView):
             return redirect("dashboard")
         return super().dispatch(request, *args, **kwargs)
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
     def get_initial(self):
         initial = super().get_initial()
+        allowed_students = student_queryset_for_user(self.request.user)
         student_id = self.request.GET.get("student")
         if student_id:
-            student = Student.objects.filter(pk=student_id).select_related("assigned_counsellor").first()
+            student = allowed_students.filter(pk=student_id).select_related("assigned_counsellor").first()
             if student:
                 initial.update(
                     {
@@ -1159,15 +1280,23 @@ class SessionCreateView(LoginRequiredMixin, CreateView):
                 )
         request_id = self.request.GET.get("request")
         if request_id:
-            linked_request = StudentRequest.objects.filter(pk=request_id).select_related("student").first()
+            linked_request = (
+                StudentRequest.objects.filter(pk=request_id)
+                .select_related("student", "assigned_to", "student__assigned_counsellor")
+                .filter(Q(student__in=allowed_students) | Q(student__isnull=True, assigned_to=self.request.user))
+                .first()
+            )
             if linked_request:
+                linked_student = linked_request.student
                 initial.update(
                     {
                         "linked_request": linked_request,
-                        "student": linked_request.student,
-                        "counsellor": linked_request.assigned_to or getattr(linked_request.student, "assigned_counsellor", None),
+                        "student": linked_student,
+                        "counsellor": linked_request.assigned_to or getattr(linked_student, "assigned_counsellor", None),
                         "confirmation_email": linked_request.submitted_by_email,
-                        "status": CounsellingSession.STATUS_SCHEDULED if linked_request.status == StudentRequest.STATUS_APPROVED else CounsellingSession.STATUS_PENDING_APPROVAL,
+                        "status": CounsellingSession.STATUS_SCHEDULED
+                        if linked_request.status == StudentRequest.STATUS_APPROVED
+                        else CounsellingSession.STATUS_PENDING_APPROVAL,
                     }
                 )
         initial.setdefault("start_at", timezone.localtime().strftime("%Y-%m-%dT%H:%M"))
@@ -1176,9 +1305,9 @@ class SessionCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         if not form.cleaned_data.get("confirmation_email"):
-            form.instance.confirmation_email = (
-                form.instance.student.parent_guardian_email or form.instance.linked_request and form.instance.linked_request.submitted_by_email
-            )
+            linked_request_email = form.instance.linked_request.submitted_by_email if form.instance.linked_request else ""
+            student_email = form.instance.student.parent_guardian_email if form.instance.student else ""
+            form.instance.confirmation_email = student_email or linked_request_email
         response = super().form_valid(form)
         if self.object.linked_request:
             self.object.linked_request.status = StudentRequest.STATUS_SCHEDULED
@@ -1212,11 +1341,108 @@ class StudentPortalAccessUpdateView(LoginRequiredMixin, View):
         return render(request, self.template_name, {"form": form, "student": student})
 
 
+class ParentPortalAccessUpdateView(LoginRequiredMixin, View):
+    template_name = "cases/parent_access_form.html"
+
+    def get(self, request, pk):
+        student = get_object_or_404(student_queryset_for_user(request.user), pk=pk)
+        if not can_edit_student(request.user, student):
+            messages.error(request, "You do not have permission to manage parent access for this student.")
+            return redirect(student.get_absolute_url())
+        form = ParentPortalAccessForm(student=student)
+        links = student.parent_access_links.select_related("user").order_by("user__username")
+        return render(request, self.template_name, {"form": form, "student": student, "links": links})
+
+    def post(self, request, pk):
+        student = get_object_or_404(student_queryset_for_user(request.user), pk=pk)
+        if not can_edit_student(request.user, student):
+            messages.error(request, "You do not have permission to manage parent access for this student.")
+            return redirect(student.get_absolute_url())
+        form = ParentPortalAccessForm(request.POST, student=student)
+        links = student.parent_access_links.select_related("user").order_by("user__username")
+        if form.is_valid():
+            access = form.save()
+            log_audit(request.user, "updated", access, {"section": "parent_portal_access", "student_id": student.pk})
+            messages.success(request, "Parent portal access saved.")
+            return redirect(student.get_absolute_url())
+        return render(request, self.template_name, {"form": form, "student": student, "links": links})
+
+
+class TeamAccessRequestsView(LoginRequiredMixin, TemplateView):
+    template_name = "cases/team_access_requests.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_portal_user(request)
+        if portal_redirect:
+            return portal_redirect
+        if not (is_admin(request.user) or is_counsellor(request.user)):
+            messages.error(request, "You do not have permission to access team requests.")
+            return redirect("dashboard")
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        if is_admin(request.user) and request.POST.get("access_request_id"):
+            access_request = get_object_or_404(CounsellorAccessRequest, pk=request.POST["access_request_id"])
+            decision = request.POST.get("decision")
+            access_request.reviewed_by = request.user
+            access_request.reviewed_at = timezone.now()
+            access_request.review_note = request.POST.get("review_note", "")
+            if decision == "approve":
+                access_request.status = CounsellorAccessRequest.STATUS_APPROVED
+                access_request.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_note", "updated_at"])
+                CounsellorStudentAccess.objects.update_or_create(
+                    counsellor=access_request.counsellor,
+                    student=access_request.student,
+                    defaults={
+                        "granted_by": request.user,
+                        "reason": access_request.reason,
+                        "is_active": True,
+                    },
+                )
+                log_audit(request.user, "updated", access_request, {"section": "team_access_approved"})
+                messages.success(request, "Extra student access approved.")
+            elif decision == "decline":
+                access_request.status = CounsellorAccessRequest.STATUS_DECLINED
+                access_request.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_note", "updated_at"])
+                log_audit(request.user, "updated", access_request, {"section": "team_access_declined"})
+                messages.success(request, "Access request declined.")
+            return redirect("team_access_requests")
+
+        if not is_counsellor(request.user):
+            messages.error(request, "Only counsellors can submit access requests.")
+            return redirect("team_access_requests")
+        form = CounsellorAccessRequestForm(request.POST, counsellor=request.user)
+        if form.is_valid():
+            access_request = form.save(commit=False)
+            access_request.counsellor = request.user
+            access_request.save()
+            log_audit(request.user, "created", access_request, {"section": "team_access_request"})
+            messages.success(request, "Access request sent to admin.")
+            return redirect("team_access_requests")
+        context = self.get_context_data(form=form)
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["form"] = kwargs.get("form") or CounsellorAccessRequestForm(counsellor=self.request.user)
+        if is_admin(self.request.user):
+            context["pending_requests"] = CounsellorAccessRequest.objects.select_related("counsellor", "student", "reviewed_by").filter(
+                status=CounsellorAccessRequest.STATUS_PENDING
+            )
+            context["recent_requests"] = CounsellorAccessRequest.objects.select_related("counsellor", "student", "reviewed_by")[:20]
+        else:
+            context["pending_requests"] = CounsellorAccessRequest.objects.none()
+            context["recent_requests"] = CounsellorAccessRequest.objects.select_related("student", "reviewed_by").filter(
+                counsellor=self.request.user
+            )[:20]
+        return context
+
+
 class ReportsView(LoginRequiredMixin, TemplateView):
     template_name = "cases/reports.html"
 
     def dispatch(self, request, *args, **kwargs):
-        portal_redirect = redirect_student_to_portal(request)
+        portal_redirect = redirect_portal_user(request)
         if portal_redirect:
             return portal_redirect
         return super().dispatch(request, *args, **kwargs)
@@ -1360,6 +1586,9 @@ class PreparedReportUpdateView(LoginRequiredMixin, UpdateView):
     template_name = "cases/prepared_report_form.html"
 
     def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_portal_user(request)
+        if portal_redirect:
+            return portal_redirect
         self.object = self.get_object()
         if not can_view_student(request.user, self.object.student):
             messages.error(request, "You do not have permission to access this report.")
@@ -1417,7 +1646,7 @@ class CommunicationCenterView(LoginRequiredMixin, TemplateView):
     template_name = "cases/communication_center.html"
 
     def dispatch(self, request, *args, **kwargs):
-        portal_redirect = redirect_student_to_portal(request)
+        portal_redirect = redirect_portal_user(request)
         if portal_redirect:
             return portal_redirect
         return super().dispatch(request, *args, **kwargs)

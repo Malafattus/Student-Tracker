@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Family Portal | UIS Student Record System{% endblock %}
+{% block content %}
+<section class="student-portal-shell">
+    <div class="student-hero-card mb-4">
+        <div class="student-hero-copy">
+            <div class="student-portal-label">Family Portal</div>
+            <h1 class="student-hero-title">Your children, all in one place.</h1>
+            <p class="hero-copy mb-0">See school updates, upcoming sessions, open requests, and important documents without needing to search through staff pages.</p>
+        </div>
+        <div class="student-status-grid">
+            <div class="student-status-card">
+                <div class="student-status-label">Students</div>
+                <div class="student-status-value">{{ family_summary.student_total }}</div>
+            </div>
+            <div class="student-status-card">
+                <div class="student-status-label">Open requests</div>
+                <div class="student-status-value">{{ family_summary.open_requests }}</div>
+            </div>
+            <div class="student-status-card">
+                <div class="student-status-label">Upcoming sessions</div>
+                <div class="student-status-value">{{ family_summary.upcoming_sessions }}</div>
+            </div>
+            <div class="student-status-card">
+                <div class="student-status-label">Missing documents</div>
+                <div class="student-status-value">{{ family_summary.missing_documents }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        {% for record in family_records %}
+            <div class="col-12">
+                <section class="student-panel">
+                    <div class="student-panel-header d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <span class="section-kicker">Student</span>
+                            <h2 class="section-title mb-1">{{ record.student.full_name }}</h2>
+                            <p class="section-subtitle mb-0">{{ record.student.student_id }} | Grade {{ record.student.grade }}{% if record.student.support_team %} | {{ record.student.support_team }}{% endif %}</p>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for link in record.portal_links %}
+                                <span class="student-meta-pill">{{ link.get_relationship_label_display }}</span>
+                            {% endfor %}
+                            {% if record.student.assigned_counsellor %}
+                                <span class="student-meta-pill">Counsellor: {{ record.student.assigned_counsellor.get_full_name }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="row g-4">
+                        <div class="col-lg-4">
+                            <div class="student-panel soft-panel h-100">
+                                <div class="section-kicker">Overview</div>
+                                <h3 class="section-title h5">Current standing</h3>
+                                <div class="student-info-grid">
+                                    <div>
+                                        <div class="student-info-label">Academic status</div>
+                                        <div class="student-info-value">{{ record.student.get_academic_status_display }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="student-info-label">Application stage</div>
+                                        <div class="student-info-value">{{ record.student.get_university_application_status_display }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="student-info-label">Case stage</div>
+                                        <div class="student-info-value">{{ record.student.get_case_stage_display }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="student-info-label">Next review</div>
+                                        <div class="student-info-value">{{ record.student.next_review_date|default:"Not set" }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="student-panel soft-panel h-100">
+                                <div class="section-kicker">Requests</div>
+                                <h3 class="section-title h5">Recent requests</h3>
+                                <div class="stacked-list">
+                                    {% for item in record.requests %}
+                                        <div class="stacked-list-item">
+                                            <div class="fw-semibold">{{ item.title }}</div>
+                                            <div class="small text-muted">{{ item.get_request_type_display }} | {{ item.get_status_display }}</div>
+                                        </div>
+                                    {% empty %}
+                                        <div class="empty-state-copy">No recent requests for this student.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="student-panel soft-panel h-100">
+                                <div class="section-kicker">Sessions</div>
+                                <h3 class="section-title h5">Upcoming sessions</h3>
+                                {% if record.next_session %}
+                                    <div class="next-step-card compact mb-3">
+                                        <div class="next-step-status">Next session</div>
+                                        <h3>{{ record.next_session.start_at|date:"M j, Y g:i A" }}</h3>
+                                        <p class="mb-0">{{ record.next_session.get_session_type_display }}</p>
+                                    </div>
+                                {% endif %}
+                                <div class="stacked-list">
+                                    {% for session in record.sessions %}
+                                        <div class="stacked-list-item">
+                                            <div class="fw-semibold">{{ session.start_at|date:"M j, Y g:i A" }}</div>
+                                            <div class="small text-muted">{{ session.get_session_type_display }} | {{ session.get_status_display }}</div>
+                                        </div>
+                                    {% empty %}
+                                        <div class="empty-state-copy">No upcoming sessions for this student.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-4 mt-1">
+                        <div class="col-lg-5">
+                            <div class="student-panel soft-panel h-100">
+                                <div class="section-kicker">Documents</div>
+                                <h3 class="section-title h5">Important documents</h3>
+                                <div class="stacked-list">
+                                    {% for document in record.missing_documents %}
+                                        <div class="stacked-list-item">
+                                            <div class="fw-semibold">{{ document.document_name }}</div>
+                                            <div class="small text-muted">Due {{ document.due_date|default:"as soon as possible" }}</div>
+                                        </div>
+                                    {% empty %}
+                                        <div class="empty-state-copy">Nothing is missing right now.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="student-panel soft-panel h-100">
+                                <div class="section-kicker">Term history</div>
+                                <h3 class="section-title h5">Recent school updates</h3>
+                                <div class="stacked-list">
+                                    {% for term_record in record.term_records %}
+                                        <div class="stacked-list-item">
+                                            <div class="fw-semibold">{{ term_record.term }}</div>
+                                            <div class="small text-muted mb-2">{{ term_record.academic_summary|default:"No academic note yet." }}</div>
+                                            <div class="small text-muted">{{ term_record.counselling_summary|default:"No counselling update yet." }}</div>
+                                        </div>
+                                    {% empty %}
+                                        <div class="empty-state-copy">No term updates have been shared yet.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-4 mt-1">
+                        <div class="col-12">
+                            <div class="student-panel soft-panel">
+                                <div class="section-kicker">Reports</div>
+                                <h3 class="section-title h5">Shared reports and files</h3>
+                                <div class="stacked-list">
+                                    {% for report in record.reports %}
+                                        <div class="stacked-list-item d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                            <div>
+                                                <div class="fw-semibold">{{ report.title }}</div>
+                                                <div class="small text-muted">{{ report.created_at|date:"M j, Y" }}</div>
+                                            </div>
+                                            {% if report.attachment %}
+                                                <a class="btn btn-sm btn-outline-primary" href="{{ report.attachment.url }}" target="_blank">Open file</a>
+                                            {% endif %}
+                                        </div>
+                                    {% empty %}
+                                        <div class="empty-state-copy">No reports have been shared yet.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        {% empty %}
+            <div class="col-12">
+                <div class="empty-state-panel">
+                    <div class="empty-state-title">No family records are linked yet.</div>
+                    <div class="empty-state-copy">Ask the school team to connect this account to the correct student profiles.</div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

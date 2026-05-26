@@ -2,8 +2,21 @@ from django.contrib.auth.models import Group, User
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import CommunicationLog, CommunicationTemplate, CounsellingSession, FollowUpTask, PreparedReport, SessionChangeRequest, Student, StudentPortalAccess, StudentRequest
-from .permissions import ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_STUDENT, ensure_roles
+from .models import (
+    CommunicationLog,
+    CommunicationTemplate,
+    CounsellorProfile,
+    CounsellorStudentAccess,
+    CounsellingSession,
+    FollowUpTask,
+    ParentPortalAccess,
+    PreparedReport,
+    SessionChangeRequest,
+    Student,
+    StudentPortalAccess,
+    StudentRequest,
+)
+from .permissions import ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_PARENT, ROLE_STUDENT, ensure_roles
 
 
 class CaseTrackerSmokeTests(TestCase):
@@ -13,11 +26,13 @@ class CaseTrackerSmokeTests(TestCase):
         self.admin_user.groups.add(Group.objects.get(name=ROLE_ADMIN))
         self.counsellor = User.objects.create_user("counsellor", password="pass12345")
         self.counsellor.groups.add(Group.objects.get(name=ROLE_COUNSELLOR))
+        CounsellorProfile.objects.create(user=self.counsellor, primary_team="Korean Team")
         self.student = Student.objects.create(
             full_name="Test Student",
             student_id="S9999",
             grade="12",
             nationality="Canada",
+            support_team="Korean Team",
             assigned_counsellor=self.counsellor,
             case_stage=Student.STAGE_ACTIVE,
         )
@@ -48,6 +63,7 @@ class CaseTrackerSmokeTests(TestCase):
             student_id="S8888",
             grade="11",
             nationality="Canada",
+            support_team="Korean Team",
             assigned_counsellor=self.counsellor,
             case_stage=Student.STAGE_WAITING_STUDENT,
         )
@@ -57,6 +73,42 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Waiting Student")
         self.assertNotContains(response, "Test Student")
+
+    def test_counsellor_only_sees_own_team_students_by_default(self):
+        Student.objects.create(
+            full_name="Other Team Student",
+            student_id="S7777",
+            grade="11",
+            nationality="Japan",
+            support_team="Japanese Team",
+            case_stage=Student.STAGE_ACTIVE,
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("student_list"))
+        self.assertContains(response, "Test Student")
+        self.assertNotContains(response, "Other Team Student")
+
+    def test_granted_cross_team_access_makes_student_visible_to_counsellor(self):
+        other_student = Student.objects.create(
+            full_name="Cross Team Student",
+            student_id="S6666",
+            grade="10",
+            nationality="Japan",
+            support_team="Japanese Team",
+            case_stage=Student.STAGE_ACTIVE,
+        )
+        CounsellorStudentAccess.objects.create(
+            counsellor=self.counsellor,
+            student=other_student,
+            granted_by=self.admin_user,
+            is_active=True,
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("student_detail", args=[other_student.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Cross Team Student")
 
     def test_public_student_request_creates_record(self):
         response = self.client.post(
@@ -232,6 +284,44 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(request_item.submitted_by_name, self.student.full_name)
         self.assertEqual(request_item.student_identifier, self.student.student_id)
 
+    def test_parent_portal_only_shows_linked_children(self):
+        sibling = Student.objects.create(
+            full_name="Sibling Student",
+            student_id="S5555",
+            grade="9",
+            nationality="Canada",
+            support_team="Korean Team",
+            assigned_counsellor=self.counsellor,
+            case_stage=Student.STAGE_ACTIVE,
+        )
+        other_student = Student.objects.create(
+            full_name="Unlinked Student",
+            student_id="S4444",
+            grade="8",
+            nationality="Canada",
+            support_team="Global Team",
+            case_stage=Student.STAGE_ACTIVE,
+        )
+        parent_user = User.objects.create_user("parent1", email="parent1@example.com", password="pass12345")
+        parent_user.groups.add(Group.objects.get(name=ROLE_PARENT))
+        ParentPortalAccess.objects.create(student=self.student, user=parent_user)
+        ParentPortalAccess.objects.create(student=sibling, user=parent_user)
+        client = Client()
+        client.login(username="parent1", password="pass12345")
+        response = client.get(reverse("parent_dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Test Student")
+        self.assertContains(response, "Sibling Student")
+        self.assertNotContains(response, "Unlinked Student")
+
+    def test_parent_role_without_links_sees_setup_page(self):
+        parent_user = User.objects.create_user("parent2", email="parent2@example.com", password="pass12345")
+        parent_user.groups.add(Group.objects.get(name=ROLE_PARENT))
+        client = Client()
+        client.login(username="parent2", password="pass12345")
+        response = client.get(reverse("dashboard"))
+        self.assertRedirects(response, reverse("parent_unavailable"))
+
     def test_session_reschedule_request_form_creates_change_request(self):
         session = CounsellingSession.objects.create(
             student=self.student,
@@ -251,6 +341,30 @@ class CaseTrackerSmokeTests(TestCase):
         )
         self.assertRedirects(response, reverse("session_reschedule_success"))
         self.assertEqual(SessionChangeRequest.objects.count(), 1)
+
+    def test_session_create_page_loads_from_student_link(self):
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("session_create"), {"student": self.student.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Book a Session")
+
+    def test_session_create_page_loads_from_request_link(self):
+        request_item = StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_COUNSELLING,
+            title="Need counselling",
+            details="Please book a support session.",
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("session_create"), {"request": request_item.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Book a Session")
 
     def test_prepared_report_save_redirects_to_saved_report_page(self):
         client = Client()
