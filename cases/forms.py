@@ -664,14 +664,26 @@ class StudentTermRecordForm(forms.ModelForm):
 class TermCourseEnrollmentForm(forms.ModelForm):
     class Meta:
         model = TermCourseEnrollment
-        fields = ["course_name", "course_code", "teacher_name", "current_mark", "notes"]
+        fields = ["course_name", "course_code", "teacher_name", "midterm_grade", "final_grade", "notes"]
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["midterm_grade"].widget.attrs["min"] = 0
+        self.fields["midterm_grade"].widget.attrs["max"] = 100
+        self.fields["final_grade"].widget.attrs["min"] = 0
+        self.fields["final_grade"].widget.attrs["max"] = 100
         apply_bootstrap_classes(self)
+
+    def clean(self):
+        cleaned = super().clean()
+        for field_name in ["midterm_grade", "final_grade"]:
+            grade = cleaned.get(field_name)
+            if grade is not None and not 0 <= grade <= 100:
+                self.add_error(field_name, "Grades must be between 0 and 100.")
+        return cleaned
 
 
 class PreparedReportForm(forms.ModelForm):

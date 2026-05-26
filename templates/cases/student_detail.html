@@ -120,7 +120,7 @@
             <div><strong>Target program:</strong> {{ student.target_program|default:"-" }}</div>
             <div><strong>Universities:</strong> {{ student.target_universities|default:"-" }}</div>
             <div><strong>Academic status:</strong> {{ student.get_academic_status_display }}</div>
-            <div><strong>Credits earned:</strong> {{ student.earned_credits }} / {{ student.required_credits }}</div>
+            <div><strong>Completed credits:</strong> {{ student.earned_credits }} / {{ student.required_credits }}</div>
             <div><strong>Credits remaining:</strong> {{ student.credits_remaining }}</div>
             <div><strong>Graduation:</strong> {{ student.get_graduation_status_display }}</div>
             <div><strong>Counselling:</strong> {{ student.get_counselling_status_display }}</div>
@@ -397,7 +397,17 @@
                                 {% if record.term.start_date and record.term.end_date %}
                                     <div class="small text-muted">{{ record.term.start_date }} to {{ record.term.end_date }}</div>
                                 {% endif %}
-                                <div class="small text-muted">{% if record.is_completed %}Completed{% else %}In progress{% endif %} | Course load: {{ record.course_load }}</div>
+                                    <div class="small text-muted">
+                                        {% if record.is_completed %}Completed{% else %}In progress{% endif %}
+                                        | Course load: {{ record.course_load }}
+                                        | Completed credits: {{ record.earned_credit_count }}
+                                    </div>
+                                    {% if record.term.midterm_checkpoint_date or record.term.final_checkpoint_date %}
+                                        <div class="small text-muted">
+                                            {% if record.term.midterm_checkpoint_date %}Midterm check: {{ record.term.midterm_checkpoint_date }}{% endif %}
+                                            {% if record.term.final_checkpoint_date %}{% if record.term.midterm_checkpoint_date %} | {% endif %}Final check: {{ record.term.final_checkpoint_date }}{% endif %}
+                                        </div>
+                                    {% endif %}
                             </div>
                         </div>
                         <p><strong>Academic:</strong> {{ record.academic_summary|default:"-" }}</p>
@@ -406,12 +416,20 @@
                         <p><strong>Agent notes:</strong> {{ record.agent_notes|default:"-" }}</p>
                         <div class="table-responsive mb-3">
                             <table class="table table-sm">
-                                <thead><tr><th>Course</th><th>Code</th><th>Teacher</th><th>Mark</th><th>Notes</th></tr></thead>
+                                <thead><tr><th>Course</th><th>Code</th><th>Teacher</th><th>Midterm</th><th>Final</th><th>Credit</th><th>Notes</th></tr></thead>
                                 <tbody>
                                     {% for course in record.courses.all %}
-                                        <tr><td>{{ course.course_name }}</td><td>{{ course.course_code|default:"-" }}</td><td>{{ course.teacher_name|default:"-" }}</td><td>{{ course.current_mark|default:"-" }}</td><td>{{ course.notes|default:"-" }}</td></tr>
+                                        <tr>
+                                            <td>{{ course.course_name }}</td>
+                                            <td>{{ course.course_code|default:"-" }}</td>
+                                            <td>{{ course.teacher_name|default:"-" }}</td>
+                                            <td>{% if course.midterm_grade is not None %}{{ course.midterm_grade }}%{% else %}-{% endif %}</td>
+                                            <td>{% if course.final_grade is not None %}{{ course.final_grade }}%{% else %}-{% endif %}</td>
+                                            <td>{% if course.credit_earned %}<span class="badge text-bg-success">Earned</span>{% elif course.final_grade is not None %}<span class="badge text-bg-danger">Not earned</span>{% else %}<span class="badge text-bg-secondary">Pending</span>{% endif %}</td>
+                                            <td>{{ course.notes|default:"-" }}</td>
+                                        </tr>
                                     {% empty %}
-                                        <tr><td colspan="5" class="text-muted text-center">{% if record.planned_course_count %}{{ record.planned_course_count }} course{{ record.planned_course_count|pluralize }} planned for this term.{% else %}No courses added yet.{% endif %}</td></tr>
+                                        <tr><td colspan="7" class="text-muted text-center">{% if record.planned_course_count %}{{ record.planned_course_count }} course{{ record.planned_course_count|pluralize }} planned for this term.{% else %}No courses added yet.{% endif %}</td></tr>
                                     {% endfor %}
                                 </tbody>
                             </table>

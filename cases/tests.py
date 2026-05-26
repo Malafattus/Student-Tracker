@@ -1,6 +1,10 @@
+from datetime import timedelta
+
 from django.contrib.auth.models import Group, User
+from django.core.management import call_command
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import (
     AcademicTerm,
@@ -28,7 +32,7 @@ class CaseTrackerSmokeTests(TestCase):
         ensure_roles()
         self.admin_user = User.objects.create_user("admin", password="pass12345")
         self.admin_user.groups.add(Group.objects.get(name=ROLE_ADMIN))
-        self.counsellor = User.objects.create_user("counsellor", password="pass12345")
+        self.counsellor = User.objects.create_user("counsellor", email="counsellor@example.com", password="pass12345")
         self.counsellor.groups.add(Group.objects.get(name=ROLE_COUNSELLOR))
         CounsellorProfile.objects.create(user=self.counsellor, primary_team="Korean Team")
         self.student = Student.objects.create(
@@ -318,8 +322,8 @@ class CaseTrackerSmokeTests(TestCase):
     def test_parent_portal_only_shows_linked_children(self):
         term = AcademicTerm.objects.create(school_year="2026-2027", name="Term 1", display_order=1, is_active=True)
         record = StudentTermRecord.objects.create(student=self.student, term=term, planned_course_count=3, is_completed=True)
-        TermCourseEnrollment.objects.create(term_record=record, course_name="ENG4U")
-        TermCourseEnrollment.objects.create(term_record=record, course_name="MHF4U")
+        TermCourseEnrollment.objects.create(term_record=record, course_name="ENG4U", final_grade=78)
+        TermCourseEnrollment.objects.create(term_record=record, course_name="MHF4U", final_grade=72)
         sibling = Student.objects.create(
             full_name="Sibling Student",
             student_id="S5555",
@@ -358,11 +362,41 @@ class CaseTrackerSmokeTests(TestCase):
         self.student.save()
         term = AcademicTerm.objects.create(school_year="2026-2027", name="Term 1", display_order=1, is_active=True)
         record = StudentTermRecord.objects.create(student=self.student, term=term, planned_course_count=3, is_completed=True)
-        TermCourseEnrollment.objects.create(term_record=record, course_name="ENG4U")
-        TermCourseEnrollment.objects.create(term_record=record, course_name="MHF4U")
+        TermCourseEnrollment.objects.create(term_record=record, course_name="ENG4U", final_grade=78)
+        TermCourseEnrollment.objects.create(term_record=record, course_name="MHF4U", final_grade=42)
+        TermCourseEnrollment.objects.create(term_record=record, course_name="SBI4U", final_grade=65)
         self.assertEqual(self.student.earned_credits, 2)
         self.assertEqual(self.student.credits_remaining, 28)
         self.assertEqual(self.student.volunteer_hours_remaining, 28)
+
+    def test_term_progress_reminder_command_marks_midterm_and_final(self):
+        today = timezone.localdate()
+        term = AcademicTerm.objects.create(
+            school_year="2026-2027",
+            name="Term 1",
+            display_order=1,
+            start_date=today - timedelta(days=40),
+            end_date=today + timedelta(days=20),
+            is_active=True,
+        )
+        record = StudentTermRecord.objects.create(student=self.student, term=term, planned_course_count=2)
+        TermCourseEnrollment.objects.create(term_record=record, course_name="ENG4U")
+        call_command("send_term_progress_reminders")
+        record.refresh_from_db()
+        self.assertIsNotNone(record.midterm_reminder_sent_at)
+
+        course = record.courses.first()
+        course.midterm_grade = 72
+        course.save(update_fields=["midterm_grade", "updated_at"])
+        record.midterm_reminder_sent_at = None
+        record.final_reminder_sent_at = None
+        record.save(update_fields=["midterm_reminder_sent_at", "final_reminder_sent_at", "updated_at"])
+        term.start_date = today - timedelta(days=80)
+        term.end_date = today - timedelta(days=1)
+        term.save(update_fields=["start_date", "end_date", "updated_at"])
+        call_command("send_term_progress_reminders")
+        record.refresh_from_db()
+        self.assertIsNotNone(record.final_reminder_sent_at)
 
     def test_parent_role_without_links_sees_setup_page(self):
         parent_user = User.objects.create_user("parent2", email="parent2@example.com", password="pass12345")

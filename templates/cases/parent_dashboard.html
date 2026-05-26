@@ -74,7 +74,7 @@
                                         <div class="student-info-value">{{ record.student.next_review_date|default:"Not set" }}</div>
                                     </div>
                                     <div>
-                                        <div class="student-info-label">Credits earned</div>
+                                        <div class="student-info-label">Completed credits</div>
                                         <div class="student-info-value">{{ record.student.earned_credits }} / {{ record.student.required_credits }}</div>
                                     </div>
                                     <div>
@@ -157,18 +157,31 @@
                             <div class="student-panel soft-panel h-100">
                                 <div class="section-kicker">Term history</div>
                                 <h3 class="section-title h5">Recent school updates</h3>
-                                <div class="stacked-list">
-                                    {% for term_record in record.term_records %}
-                                        <div class="stacked-list-item">
-                                            <div class="fw-semibold">{{ term_record.term }}</div>
-                                            <div class="small text-muted mb-2">{% if term_record.is_completed %}Completed{% else %}In progress{% endif %} | Course load: {{ term_record.course_load }}</div>
-                                            <div class="small text-muted mb-2">{{ term_record.academic_summary|default:"No academic note yet." }}</div>
-                                            <div class="small text-muted">{{ term_record.counselling_summary|default:"No counselling update yet." }}</div>
+                                        <div class="stacked-list">
+                                            {% for term_record in record.term_records %}
+                                                <div class="stacked-list-item">
+                                                    <div class="fw-semibold">{{ term_record.term }}</div>
+                                                    <div class="small text-muted mb-2">{% if term_record.is_completed %}Completed{% else %}In progress{% endif %} | Course load: {{ term_record.course_load }} | Completed credits: {{ term_record.earned_credit_count }}</div>
+                                                    {% if term_record.term.midterm_checkpoint_date or term_record.term.final_checkpoint_date %}
+                                                        <div class="small text-muted mb-2">
+                                                            {% if term_record.term.midterm_checkpoint_date %}Midterm check: {{ term_record.term.midterm_checkpoint_date }}{% endif %}
+                                                            {% if term_record.term.final_checkpoint_date %}{% if term_record.term.midterm_checkpoint_date %} | {% endif %}Final check: {{ term_record.term.final_checkpoint_date }}{% endif %}
+                                                        </div>
+                                                    {% endif %}
+                                                    <div class="small text-muted mb-2">{{ term_record.academic_summary|default:"No academic note yet." }}</div>
+                                                    <div class="small text-muted">{{ term_record.counselling_summary|default:"No counselling update yet." }}</div>
+                                                    {% if term_record.courses.all %}
+                                                        <div class="small text-muted mt-2">
+                                                            {% for course in term_record.courses.all %}
+                                                                <div>{{ course.course_name }}{% if course.final_grade is not None %} | Final {{ course.final_grade }}%{% elif course.midterm_grade is not None %} | Midterm {{ course.midterm_grade }}%{% endif %} | {% if course.credit_earned %}Credit earned{% elif course.final_grade is not None %}Credit not earned{% else %}Credit pending{% endif %}</div>
+                                                            {% endfor %}
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                            {% empty %}
+                                                <div class="empty-state-copy">No term updates have been shared yet.</div>
+                                            {% endfor %}
                                         </div>
-                                    {% empty %}
-                                        <div class="empty-state-copy">No term updates have been shared yet.</div>
-                                    {% endfor %}
-                                </div>
                             </div>
                         </div>
                     </div>

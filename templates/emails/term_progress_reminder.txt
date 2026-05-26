@@ -1,0 +1,13 @@
+Hello {{ student.assigned_counsellor.get_full_name|default:student.assigned_counsellor.username }},
+
+This is a reminder that {{ checkpoint|title }} grades should now be entered for {{ student.full_name }}.
+
+Student: {{ student.full_name }}
+Term: {{ term_record.term }}
+Checkpoint date: {{ checkpoint_date|default:"Not set" }}
+Planned course load: {{ term_record.course_load }}
+
+Please update the student's term courses, record the {{ checkpoint }} grades, and prepare the related report if needed.
+
+Open student record:
+{{ student_url }}

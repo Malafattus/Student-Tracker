@@ -214,12 +214,25 @@ class AcademicTerm(TimeStampedModel):
     def __str__(self):
         return f"{self.school_year} {self.name}"
 
+    @property
+    def midterm_checkpoint_date(self):
+        if not self.start_date or not self.end_date:
+            return None
+        duration = self.end_date - self.start_date
+        return self.start_date + duration / 2
+
+    @property
+    def final_checkpoint_date(self):
+        return self.end_date
+
 
 class StudentTermRecord(TimeStampedModel):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="term_records")
     term = models.ForeignKey(AcademicTerm, on_delete=models.CASCADE, related_name="student_records")
     planned_course_count = models.PositiveSmallIntegerField(default=0)
     is_completed = models.BooleanField(default=False)
+    midterm_reminder_sent_at = models.DateTimeField(blank=True, null=True)
+    final_reminder_sent_at = models.DateTimeField(blank=True, null=True)
     academic_summary = models.TextField(blank=True)
     attendance_summary = models.TextField(blank=True)
     counselling_summary = models.TextField(blank=True)
@@ -238,11 +251,45 @@ class StudentTermRecord(TimeStampedModel):
         return actual_courses or self.planned_course_count
 
     @property
-    def earned_credit_count(self):
-        if not self.is_completed:
-            return 0
+    def passed_course_count(self):
         actual_courses = self.courses.count()
-        return actual_courses or self.planned_course_count
+        if actual_courses:
+            return self.courses.filter(final_grade__gte=50).count()
+        return self.planned_course_count if self.is_completed else 0
+
+    @property
+    def earned_credit_count(self):
+        return self.passed_course_count
+
+    @property
+    def midterm_recorded_count(self):
+        return self.courses.exclude(midterm_grade__isnull=True).count()
+
+    @property
+    def final_recorded_count(self):
+        return self.courses.exclude(final_grade__isnull=True).count()
+
+    @property
+    def needs_midterm_grades(self):
+        actual_courses = self.courses.count()
+        if not actual_courses:
+            return False
+        return self.midterm_recorded_count < actual_courses
+
+    @property
+    def needs_final_grades(self):
+        actual_courses = self.courses.count()
+        if not actual_courses:
+            return False
+        return self.final_recorded_count < actual_courses
+
+    @property
+    def next_report_checkpoint(self):
+        if self.term.final_checkpoint_date and self.needs_final_grades:
+            return self.term.final_checkpoint_date, "final"
+        if self.term.midterm_checkpoint_date and self.needs_midterm_grades:
+            return self.term.midterm_checkpoint_date, "midterm"
+        return None, None
 
 
 class TermCourseEnrollment(TimeStampedModel):
@@ -251,6 +298,8 @@ class TermCourseEnrollment(TimeStampedModel):
     course_code = models.CharField(max_length=50, blank=True)
     teacher_name = models.CharField(max_length=255, blank=True)
     current_mark = models.CharField(max_length=20, blank=True)
+    midterm_grade = models.PositiveSmallIntegerField(blank=True, null=True)
+    final_grade = models.PositiveSmallIntegerField(blank=True, null=True)
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -258,6 +307,18 @@ class TermCourseEnrollment(TimeStampedModel):
 
     def __str__(self):
         return self.course_name
+
+    @property
+    def credit_earned(self):
+        return self.final_grade is not None and self.final_grade >= 50
+
+    @property
+    def mark_display(self):
+        if self.final_grade is not None:
+            return f"Final {self.final_grade}%"
+        if self.midterm_grade is not None:
+            return f"Midterm {self.midterm_grade}%"
+        return self.current_mark or "-"
 
 
 def request_attachment_upload_to(instance, filename):

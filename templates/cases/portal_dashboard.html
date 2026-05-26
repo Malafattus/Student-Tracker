@@ -132,7 +132,7 @@
                         <div class="student-info-value">{{ student.get_homestay_status_display }}</div>
                     </div>
                     <div class="student-info-item">
-                        <div class="student-info-label">Credits earned</div>
+                        <div class="student-info-label">Completed credits</div>
                         <div class="student-info-value">{{ student.earned_credits }} / {{ student.required_credits }}</div>
                     </div>
                     <div class="student-info-item">
@@ -227,8 +227,14 @@
                                         <div class="student-term-dates">{{ record.term.start_date }} to {{ record.term.end_date }}</div>
                                     {% endif %}
                                     <div class="student-term-dates">
-                                        {% if record.is_completed %}Completed{% else %}In progress{% endif %} | Course load: {{ record.course_load }}
+                                        {% if record.is_completed %}Completed{% else %}In progress{% endif %} | Course load: {{ record.course_load }} | Completed credits: {{ record.earned_credit_count }}
                                     </div>
+                                    {% if record.term.midterm_checkpoint_date or record.term.final_checkpoint_date %}
+                                        <div class="student-term-dates">
+                                            {% if record.term.midterm_checkpoint_date %}Midterm check: {{ record.term.midterm_checkpoint_date }}{% endif %}
+                                            {% if record.term.final_checkpoint_date %}{% if record.term.midterm_checkpoint_date %} | {% endif %}Final check: {{ record.term.final_checkpoint_date }}{% endif %}
+                                        </div>
+                                    {% endif %}
                                 </div>
                             </div>
                             <div class="student-term-summary">
@@ -243,7 +249,16 @@
                                             <div class="student-course-name">{{ course.course_name }}</div>
                                             <div class="student-course-meta">{{ course.course_code|default:"No code" }}{% if course.teacher_name %} | {{ course.teacher_name }}{% endif %}</div>
                                         </div>
-                                        <div class="student-course-mark">{{ course.current_mark|default:"-" }}</div>
+                                        <div class="student-course-mark">
+                                            {% if course.final_grade is not None %}{{ course.final_grade }}%
+                                            {% elif course.midterm_grade is not None %}{{ course.midterm_grade }}%
+                                            {% else %}-{% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="student-course-meta">
+                                        Midterm: {% if course.midterm_grade is not None %}{{ course.midterm_grade }}%{% else %}-{% endif %}
+                                        | Final: {% if course.final_grade is not None %}{{ course.final_grade }}%{% else %}-{% endif %}
+                                        | Credit: {% if course.credit_earned %}Earned{% elif course.final_grade is not None %}Not earned{% else %}Pending{% endif %}
                                     </div>
                                 {% empty %}
                                     <div class="student-empty-inline">{% if record.planned_course_count %}{{ record.planned_course_count }} course{{ record.planned_course_count|pluralize }} planned for this term.{% else %}No courses recorded yet.{% endif %}</div>

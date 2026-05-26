@@ -179,3 +179,35 @@ def sessions_needing_reminders(queryset):
         start_at__lte=horizon,
         reminder_sent_at__isnull=True,
     )
+
+
+def send_term_progress_reminder(term_record, checkpoint):
+    counsellor = term_record.student.assigned_counsellor
+    if not counsellor or not counsellor.email:
+        return False
+    checkpoint_label = "midterm" if checkpoint == "midterm" else "final"
+    checkpoint_date = (
+        term_record.term.midterm_checkpoint_date if checkpoint == "midterm" else term_record.term.final_checkpoint_date
+    )
+    student_url = build_absolute_url(term_record.student.get_absolute_url())
+    sent = send_notification_email(
+        f"{checkpoint_label.title()} grades due for {term_record.student.full_name}",
+        "term_progress_reminder",
+        [counsellor.email],
+        {
+            "term_record": term_record,
+            "student": term_record.student,
+            "checkpoint": checkpoint_label,
+            "checkpoint_date": checkpoint_date,
+            "student_url": student_url,
+        },
+    )
+    if sent:
+        timestamp = timezone.now()
+        if checkpoint == "midterm":
+            term_record.midterm_reminder_sent_at = timestamp
+            term_record.save(update_fields=["midterm_reminder_sent_at", "updated_at"])
+        else:
+            term_record.final_reminder_sent_at = timestamp
+            term_record.save(update_fields=["final_reminder_sent_at", "updated_at"])
+    return sent
