@@ -20,6 +20,7 @@ from django.views.generic import CreateView, DetailView, ListView, TemplateView,
 
 from .audit import log_audit
 from .forms import (
+    CommunicationTemplateForm,
     PreparedReportForm,
     CounsellingSessionForm,
     CommunicationLogForm,
@@ -44,6 +45,7 @@ from .models import (
     AcademicTerm,
     AuditLog,
     CommunicationLog,
+    CommunicationTemplate,
     CounsellingSession,
     DocumentRequirement,
     FollowUpTask,
@@ -134,6 +136,44 @@ def save_request_attachments(request_item, uploaded_files, uploaded_by=None):
             original_name=uploaded_file.name,
             file=uploaded_file,
         )
+
+
+def log_queued_request_response(response_item, user, template=None):
+    request_item = response_item.request
+    CommunicationLog.objects.create(
+        student=request_item.student,
+        created_by=user,
+        direction="outbound",
+        method="email",
+        category=CommunicationLog.CATEGORY_REQUEST,
+        audience=CommunicationLog.AUDIENCE_STUDENT,
+        contact_person=request_item.submitted_by_name,
+        recipient_email=response_item.recipient_email,
+        subject=response_item.subject,
+        communicated_at=response_item.send_requested_at or timezone.now(),
+        summary=response_item.message,
+        status=CommunicationLog.STATUS_QUEUED,
+        related_request_response=response_item,
+        template=template,
+    )
+
+
+def log_queued_prepared_report(report, user):
+    CommunicationLog.objects.create(
+        student=report.student,
+        created_by=user,
+        direction="outbound",
+        method="email",
+        category=CommunicationLog.CATEGORY_REPORT,
+        audience=CommunicationLog.AUDIENCE_PARENT if report.audience == PreparedReport.AUDIENCE_PARENT else CommunicationLog.AUDIENCE_AGENT,
+        contact_person=report.recipient_name or report.student.full_name,
+        recipient_email=report.recipient_email,
+        subject=report.title,
+        communicated_at=report.send_requested_at or timezone.now(),
+        summary=report.summary or report.title,
+        status=CommunicationLog.STATUS_QUEUED,
+        related_report=report,
+    )
 
 
 def request_queryset_for_user(user):
@@ -306,6 +346,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         }
         context["recent_students"] = students.order_by("-updated_at")[:8]
         context["recent_requests"] = StudentRequest.objects.select_related("student").order_by("-created_at")[:6]
+        context["recent_communications"] = CommunicationLog.objects.filter(student__in=students).select_related("student")[:6]
         context["recent_audit_logs"] = AuditLog.objects.filter(
             Q(model_name="Student") | Q(model_name="FollowUpTask") | Q(model_name="StudentNote")
         )[:8]
@@ -878,11 +919,13 @@ class StudentRequestUpdateView(LoginRequiredMixin, UpdateView):
     def handle_response(self, request):
         form = StudentRequestResponseForm(request.POST, request.FILES, request_item=self.object)
         if form.is_valid():
+            selected_template = form.cleaned_data.get("template")
             response_item = form.save(commit=False)
             response_item.request = self.object
             response_item.sent_by = request.user
             response_item.send_requested_at = timezone.now()
             response_item.save()
+            log_queued_request_response(response_item, request.user, selected_template)
             if response_item.mark_complete and self.object.status not in [StudentRequest.STATUS_COMPLETED, StudentRequest.STATUS_CLOSED]:
                 self.object.status = StudentRequest.STATUS_COMPLETED
                 self.object.save(update_fields=["status", "updated_at"])
@@ -1200,6 +1243,8 @@ class ReportsView(LoginRequiredMixin, TemplateView):
             if "send_report" in request.POST and report.recipient_email:
                 report.send_requested_at = timezone.now()
             report.save()
+            if "send_report" in request.POST and report.recipient_email:
+                log_queued_prepared_report(report, request.user)
             success_url = reverse("prepared_report_update", args=[report.pk])
             if "send_report" in request.POST and report.recipient_email:
                 messages.success(request, "Report saved and queued for email delivery.")
@@ -1295,6 +1340,8 @@ class AddPreparedReportView(LoginRequiredMixin, View):
             if "send_report" in request.POST and report.recipient_email:
                 report.send_requested_at = timezone.now()
             report.save()
+            if "send_report" in request.POST and report.recipient_email:
+                log_queued_prepared_report(report, request.user)
             success_url = reverse("prepared_report_update", args=[report.pk])
             if "send_report" in request.POST and report.recipient_email:
                 messages.success(request, "Report saved and queued for email delivery.")
@@ -1355,12 +1402,63 @@ class PreparedReportUpdateView(LoginRequiredMixin, UpdateView):
             form.instance.sent_at = None
             form.instance.send_error = ""
         response = super().form_valid(form)
+        if "send_report" in self.request.POST and self.object.recipient_email:
+            self.object.communication_logs.filter(status=CommunicationLog.STATUS_QUEUED).delete()
+            log_queued_prepared_report(self.object, self.request.user)
         log_audit(self.request.user, "updated", self.object, {"section": "prepared_report"})
         if "send_report" in self.request.POST and self.object.recipient_email:
             messages.success(self.request, "Report updated and queued for email delivery.")
         else:
             messages.success(self.request, "Report updated.")
         return response
+
+
+class CommunicationCenterView(LoginRequiredMixin, TemplateView):
+    template_name = "cases/communication_center.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        portal_redirect = redirect_student_to_portal(request)
+        if portal_redirect:
+            return portal_redirect
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        if not (is_admin(request.user) or is_counsellor(request.user)):
+            messages.error(request, "You do not have permission to manage communication templates.")
+            return redirect("communication_center")
+        template_form = CommunicationTemplateForm(request.POST)
+        if template_form.is_valid():
+            template = template_form.save()
+            log_audit(request.user, "created", template, {"section": "communication_template"})
+            messages.success(request, "Communication template saved.")
+            return redirect("communication_center")
+        context = self.get_context_data(template_form=template_form)
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        students = student_queryset_for_user(self.request.user)
+        communications = CommunicationLog.objects.filter(student__in=students).select_related(
+            "student", "created_by", "template"
+        )
+        current_scope = self.request.GET.get("scope", "recent")
+        if current_scope == "queued":
+            communications = communications.filter(status=CommunicationLog.STATUS_QUEUED)
+        elif current_scope == "sent":
+            communications = communications.filter(status=CommunicationLog.STATUS_SENT)
+        elif current_scope == "failed":
+            communications = communications.filter(status=CommunicationLog.STATUS_FAILED)
+        context["current_scope"] = current_scope
+        context["communication_stats"] = {
+            "queued": CommunicationLog.objects.filter(student__in=students, status=CommunicationLog.STATUS_QUEUED).count(),
+            "sent": CommunicationLog.objects.filter(student__in=students, status=CommunicationLog.STATUS_SENT).count(),
+            "failed": CommunicationLog.objects.filter(student__in=students, status=CommunicationLog.STATUS_FAILED).count(),
+            "templates": CommunicationTemplate.objects.filter(is_active=True).count(),
+        }
+        context["communications"] = communications.order_by("-communicated_at")[:30]
+        context["templates"] = CommunicationTemplate.objects.order_by("template_type", "name")
+        context["template_form"] = kwargs.get("template_form") or CommunicationTemplateForm()
+        return context
 
 
 class UserManagementView(LoginRequiredMixin, View):

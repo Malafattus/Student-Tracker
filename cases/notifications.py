@@ -5,6 +5,8 @@ from django.core.mail import EmailMultiAlternatives, get_connection
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+from .models import CommunicationLog
+
 
 def build_absolute_url(path):
     base = getattr(settings, "SITE_URL", "").rstrip("/")
@@ -123,9 +125,18 @@ def send_request_response(request_response):
         request_response.sent_at = timezone.now()
         request_response.send_error = ""
         request_response.save(update_fields=["sent_at", "send_error", "updated_at"])
+        request_response.communication_logs.update(
+            status=CommunicationLog.STATUS_SENT,
+            send_error="",
+            communicated_at=timezone.now(),
+        )
     else:
         request_response.send_error = "Email delivery did not complete."
         request_response.save(update_fields=["send_error", "updated_at"])
+        request_response.communication_logs.update(
+            status=CommunicationLog.STATUS_FAILED,
+            send_error=request_response.send_error,
+        )
     return sent
 
 
@@ -144,9 +155,18 @@ def send_prepared_report(report):
         report.sent_at = timezone.now()
         report.send_error = ""
         report.save(update_fields=["sent_at", "send_error", "updated_at"])
+        report.communication_logs.update(
+            status=CommunicationLog.STATUS_SENT,
+            send_error="",
+            communicated_at=timezone.now(),
+        )
     else:
         report.send_error = "Email delivery did not complete."
         report.save(update_fields=["send_error", "updated_at"])
+        report.communication_logs.update(
+            status=CommunicationLog.STATUS_FAILED,
+            send_error=report.send_error,
+        )
     return sent
 
 

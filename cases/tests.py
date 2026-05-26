@@ -2,7 +2,7 @@ from django.contrib.auth.models import Group, User
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import CounsellingSession, FollowUpTask, PreparedReport, SessionChangeRequest, Student, StudentPortalAccess, StudentRequest
+from .models import CommunicationLog, CommunicationTemplate, CounsellingSession, FollowUpTask, PreparedReport, SessionChangeRequest, Student, StudentPortalAccess, StudentRequest
 from .permissions import ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_STUDENT, ensure_roles
 
 
@@ -34,6 +34,13 @@ class CaseTrackerSmokeTests(TestCase):
         response = client.get(reverse("student_detail", args=[self.student.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Case stage and next steps")
+
+    def test_counsellor_can_open_communication_center(self):
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("communication_center"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Communication Center")
 
     def test_student_list_can_filter_by_case_stage(self):
         Student.objects.create(
@@ -130,6 +137,43 @@ class CaseTrackerSmokeTests(TestCase):
         request_item.refresh_from_db()
         self.assertEqual(request_item.status, StudentRequest.STATUS_COMPLETED)
         self.assertIsNone(request_item.closed_at)
+
+    def test_queueing_request_response_creates_communication_log(self):
+        request_item = StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_TRANSCRIPT,
+            title="Need transcript update",
+            details="Please send an update.",
+        )
+        template = CommunicationTemplate.objects.create(
+            name="Transcript update",
+            template_type=CommunicationTemplate.TYPE_REQUEST,
+            audience=CommunicationLog.AUDIENCE_STUDENT,
+            subject_template="Transcript update",
+            body_template="Your transcript request is being reviewed.",
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.post(
+            reverse("request_update", args=[request_item.pk]),
+            {
+                "send_response": "1",
+                "template": template.pk,
+                "subject": "",
+                "recipient_email": "jamie@example.com",
+                "message": "",
+                "mark_complete": "on",
+            },
+        )
+        self.assertRedirects(response, reverse("request_update", args=[request_item.pk]))
+        communication = CommunicationLog.objects.get(related_request_response__isnull=False)
+        self.assertEqual(communication.status, CommunicationLog.STATUS_QUEUED)
+        self.assertEqual(communication.template, template)
+        self.assertEqual(communication.subject, "Transcript update")
 
     def test_login_with_email_identifier(self):
         self.admin_user.email = "admin@example.com"

@@ -134,6 +134,23 @@
                 {% endfor %}
             </div>
         </div>
+        <div class="card shadow-sm premium-card mt-4">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Communications</span>
+                <h2 class="section-title mb-1">Recent message activity</h2>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for item in recent_communications %}
+                    <div class="list-group-item border-0 px-4 py-3">
+                        <div class="fw-semibold">{{ item.subject|default:item.get_category_display }}</div>
+                        <div class="small text-muted">{{ item.student.full_name }} | {{ item.get_status_display }}</div>
+                        <div class="small text-muted">{{ item.communicated_at|date:"M j, Y g:i A" }}</div>
+                    </div>
+                {% empty %}
+                    <div class="list-group-item border-0 px-4 py-3 text-muted">No communication history yet.</div>
+                {% endfor %}
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

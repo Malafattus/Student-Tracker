@@ -295,6 +295,19 @@ class DocumentRequirement(TimeStampedModel):
 
 
 class CommunicationLog(TimeStampedModel):
+    CATEGORY_GENERAL = "general"
+    CATEGORY_REQUEST = "request"
+    CATEGORY_REPORT = "report"
+    CATEGORY_SESSION = "session"
+    STATUS_LOGGED = "logged"
+    STATUS_QUEUED = "queued"
+    STATUS_SENT = "sent"
+    STATUS_FAILED = "failed"
+    AUDIENCE_STUDENT = "student"
+    AUDIENCE_PARENT = "parent"
+    AUDIENCE_AGENT = "agent"
+    AUDIENCE_STAFF = "staff"
+    AUDIENCE_OTHER = "other"
     DIRECTION_CHOICES = [("outbound", "Outbound"), ("inbound", "Inbound")]
     METHOD_CHOICES = [
         ("email", "Email"),
@@ -304,14 +317,60 @@ class CommunicationLog(TimeStampedModel):
         ("whatsapp", "WhatsApp"),
         ("other", "Other"),
     ]
+    CATEGORY_CHOICES = [
+        (CATEGORY_GENERAL, "General"),
+        (CATEGORY_REQUEST, "Request Response"),
+        (CATEGORY_REPORT, "Report Delivery"),
+        (CATEGORY_SESSION, "Session Communication"),
+    ]
+    STATUS_CHOICES = [
+        (STATUS_LOGGED, "Logged"),
+        (STATUS_QUEUED, "Queued"),
+        (STATUS_SENT, "Sent"),
+        (STATUS_FAILED, "Failed"),
+    ]
+    AUDIENCE_CHOICES = [
+        (AUDIENCE_STUDENT, "Student"),
+        (AUDIENCE_PARENT, "Parent/Guardian"),
+        (AUDIENCE_AGENT, "Agent"),
+        (AUDIENCE_STAFF, "Staff"),
+        (AUDIENCE_OTHER, "Other"),
+    ]
 
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="communications")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     direction = models.CharField(max_length=20, choices=DIRECTION_CHOICES, default="outbound")
     method = models.CharField(max_length=20, choices=METHOD_CHOICES, default="email")
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_GENERAL)
+    audience = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default=AUDIENCE_OTHER)
     contact_person = models.CharField(max_length=255)
+    recipient_email = models.EmailField(blank=True)
+    subject = models.CharField(max_length=255, blank=True)
     communicated_at = models.DateTimeField()
     summary = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_LOGGED)
+    send_error = models.TextField(blank=True)
+    related_request_response = models.ForeignKey(
+        "StudentRequestResponse",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="communication_logs",
+    )
+    related_report = models.ForeignKey(
+        "PreparedReport",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="communication_logs",
+    )
+    template = models.ForeignKey(
+        "CommunicationTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="communication_logs",
+    )
 
     class Meta:
         ordering = ["-communicated_at"]
@@ -515,6 +574,33 @@ class StudentRequestResponse(TimeStampedModel):
 
     def __str__(self):
         return f"Response to {self.request}"
+
+
+class CommunicationTemplate(TimeStampedModel):
+    TYPE_REQUEST = "request"
+    TYPE_GENERAL = "general"
+
+    TEMPLATE_TYPE_CHOICES = [
+        (TYPE_REQUEST, "Request Response"),
+        (TYPE_GENERAL, "General Update"),
+    ]
+
+    name = models.CharField(max_length=120, unique=True)
+    template_type = models.CharField(max_length=20, choices=TEMPLATE_TYPE_CHOICES, default=TYPE_GENERAL)
+    audience = models.CharField(
+        max_length=20,
+        choices=CommunicationLog.AUDIENCE_CHOICES,
+        default=CommunicationLog.AUDIENCE_PARENT,
+    )
+    subject_template = models.CharField(max_length=255)
+    body_template = models.TextField()
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["template_type", "name"]
+
+    def __str__(self):
+        return self.name
 
 
 class PreparedReport(TimeStampedModel):

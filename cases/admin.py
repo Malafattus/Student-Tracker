@@ -4,6 +4,7 @@ from .models import (
     AcademicTerm,
     AuditLog,
     CommunicationLog,
+    CommunicationTemplate,
     CounsellingSession,
     DocumentRequirement,
     FollowUpTask,
@@ -31,6 +32,7 @@ admin.site.register(StudentNote)
 admin.site.register(FollowUpTask)
 admin.site.register(DocumentRequirement)
 admin.site.register(CommunicationLog)
+admin.site.register(CommunicationTemplate)
 admin.site.register(AuditLog)
 admin.site.register(AcademicTerm)
 admin.site.register(StudentRequest)

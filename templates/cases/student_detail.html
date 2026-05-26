@@ -348,9 +348,11 @@
             <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Communication history</h2></div><div class="list-group list-group-flush">
                 {% for communication in student.communications.all %}
                     <div class="list-group-item">
-                        <div class="fw-semibold">{{ communication.get_method_display }} | {{ communication.contact_person }}</div>
-                        <div class="small text-muted mb-2">{{ communication.communicated_at|date:"M j, Y g:i A" }} | {{ communication.get_direction_display }}</div>
+                        <div class="fw-semibold">{{ communication.subject|default:communication.get_method_display }} | {{ communication.contact_person }}</div>
+                        <div class="small text-muted mb-2">{{ communication.communicated_at|date:"M j, Y g:i A" }} | {{ communication.get_direction_display }} | {{ communication.get_category_display }} | {{ communication.get_status_display }}</div>
+                        {% if communication.recipient_email %}<div class="small text-muted mb-2">{{ communication.recipient_email }}</div>{% endif %}
                         <div>{{ communication.summary }}</div>
+                        {% if communication.send_error %}<div class="small text-danger mt-2">{{ communication.send_error }}</div>{% endif %}
                     </div>
                 {% empty %}
                     <div class="list-group-item text-muted">No communication logs yet.</div>

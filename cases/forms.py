@@ -6,6 +6,7 @@ from django.contrib.auth.models import Group, User
 from .models import (
     AcademicTerm,
     CommunicationLog,
+    CommunicationTemplate,
     CounsellingSession,
     DocumentRequirement,
     FollowUpTask,
@@ -156,7 +157,17 @@ class DocumentRequirementForm(forms.ModelForm):
 class CommunicationLogForm(forms.ModelForm):
     class Meta:
         model = CommunicationLog
-        fields = ["direction", "method", "contact_person", "communicated_at", "summary"]
+        fields = [
+            "direction",
+            "method",
+            "category",
+            "audience",
+            "contact_person",
+            "recipient_email",
+            "subject",
+            "communicated_at",
+            "summary",
+        ]
         widgets = {"communicated_at": DateTimeInput(), "summary": forms.Textarea(attrs={"rows": 3})}
 
     def __init__(self, *args, **kwargs):
@@ -411,6 +422,8 @@ class SessionChangeRequestForm(forms.ModelForm):
 
 
 class StudentRequestResponseForm(forms.ModelForm):
+    template = forms.ModelChoiceField(queryset=CommunicationTemplate.objects.none(), required=False)
+
     class Meta:
         model = StudentRequestResponse
         fields = ["subject", "recipient_email", "message", "attachment", "mark_complete"]
@@ -420,6 +433,11 @@ class StudentRequestResponseForm(forms.ModelForm):
 
     def __init__(self, *args, request_item=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["template"].queryset = CommunicationTemplate.objects.filter(
+            is_active=True, template_type=CommunicationTemplate.TYPE_REQUEST
+        )
+        self.fields["subject"].required = False
+        self.fields["message"].required = False
         if request_item:
             self.fields["subject"].initial = f"Update on your request: {request_item.title}"
             self.fields["recipient_email"].initial = request_item.submitted_by_email
@@ -429,6 +447,31 @@ class StudentRequestResponseForm(forms.ModelForm):
                 "Update:\n"
             )
         apply_bootstrap_classes(self)
+
+    def apply_selected_template(self):
+        template = self.cleaned_data.get("template")
+        if not template:
+            return
+        if not self.cleaned_data.get("subject"):
+            self.cleaned_data["subject"] = template.subject_template
+        if not self.cleaned_data.get("message"):
+            self.cleaned_data["message"] = template.body_template
+
+    def clean(self):
+        cleaned = super().clean()
+        template = cleaned.get("template")
+        if template:
+            if not cleaned.get("subject"):
+                cleaned["subject"] = template.subject_template
+                self.cleaned_data["subject"] = template.subject_template
+            if not cleaned.get("message"):
+                cleaned["message"] = template.body_template
+                self.cleaned_data["message"] = template.body_template
+        if not cleaned.get("subject"):
+            self.add_error("subject", "Add a subject or choose a template.")
+        if not cleaned.get("message"):
+            self.add_error("message", "Add a message or choose a template.")
+        return cleaned
 
 
 class RequestTaskForm(forms.ModelForm):
@@ -515,6 +558,19 @@ class PreparedReportForm(forms.ModelForm):
         self.fields["term"].queryset = AcademicTerm.objects.filter(is_active=True)
         if student:
             self.fields["student"].initial = student
+        apply_bootstrap_classes(self)
+
+
+class CommunicationTemplateForm(forms.ModelForm):
+    class Meta:
+        model = CommunicationTemplate
+        fields = ["name", "template_type", "audience", "subject_template", "body_template", "is_active"]
+        widgets = {
+            "body_template": forms.Textarea(attrs={"rows": 5}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         apply_bootstrap_classes(self)
 
 

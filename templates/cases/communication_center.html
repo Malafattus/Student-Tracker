@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Communications | UIS Student Record System{% endblock %}
+{% block content %}
+<section class="ops-shell">
+    <section class="ops-hero is-soft">
+        <div>
+            <span class="ops-eyebrow">Communication Center</span>
+            <h1 class="ops-hero-title">Track outreach, reuse message templates, and keep delivery history in one place.</h1>
+            <p class="ops-hero-copy">This workspace brings together queued emails, sent updates, delivery problems, and reusable templates so staff can communicate with more confidence.</p>
+        </div>
+        <div class="ops-hero-actions">
+            <div class="ops-pill-group">
+                <span class="ops-pill">Queued: {{ communication_stats.queued }}</span>
+                <span class="ops-pill">Sent: {{ communication_stats.sent }}</span>
+                <span class="ops-pill">Failed: {{ communication_stats.failed }}</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="ops-stat-grid">
+        <div class="ops-stat-card"><div class="label">Queued</div><div class="value">{{ communication_stats.queued }}</div></div>
+        <div class="ops-stat-card"><div class="label">Sent</div><div class="value">{{ communication_stats.sent }}</div></div>
+        <div class="ops-stat-card"><div class="label">Failed</div><div class="value">{{ communication_stats.failed }}</div></div>
+        <div class="ops-stat-card"><div class="label">Active Templates</div><div class="value">{{ communication_stats.templates }}</div></div>
+    </section>
+
+    <div class="ops-grid-two">
+        <section class="ops-section-card">
+            <div class="ops-section-head">
+                <div>
+                    <h2 class="ops-section-title">Delivery history</h2>
+                    <p class="ops-section-copy">See what is queued, what has gone out, and what still needs attention.</p>
+                </div>
+                <div class="ops-history-toggle">
+                    <a class="btn btn-sm {% if current_scope == 'recent' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{% url 'communication_center' %}">Recent</a>
+                    <a class="btn btn-sm {% if current_scope == 'queued' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'communication_center' %}?scope=queued">Queued</a>
+                    <a class="btn btn-sm {% if current_scope == 'sent' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'communication_center' %}?scope=sent">Sent</a>
+                    <a class="btn btn-sm {% if current_scope == 'failed' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'communication_center' %}?scope=failed">Failed</a>
+                </div>
+            </div>
+            <div class="ops-section-body">
+                <div class="ops-list">
+                    {% for item in communications %}
+                        <div class="ops-list-item">
+                            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                                <div>
+                                    <div class="ops-list-title">{{ item.subject|default:item.get_category_display }}</div>
+                                    <div class="ops-list-meta">
+                                        <a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>
+                                        {% if item.recipient_email %} | {{ item.recipient_email }}{% endif %}
+                                        | {{ item.get_status_display }}
+                                    </div>
+                                    <div class="ops-list-meta">{{ item.get_category_display }} | {{ item.communicated_at|date:"M j, Y g:i A" }}</div>
+                                    {% if item.template %}<div class="ops-list-meta">Template: {{ item.template.name }}</div>{% endif %}
+                                </div>
+                                <span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'queued' %}text-bg-warning{% elif item.status == 'failed' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ item.get_status_display }}</span>
+                            </div>
+                            <div class="small text-muted mt-2">{{ item.summary|truncatechars:220 }}</div>
+                            {% if item.send_error %}
+                                <div class="small text-danger mt-2">{{ item.send_error }}</div>
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <div class="empty-state-panel">
+                            <div class="empty-state-title">No communication records yet</div>
+                            <div class="empty-state-copy">Queued request replies, report emails, and manual communication entries will appear here.</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        <div class="d-flex flex-column gap-4">
+            <section class="ops-section-card">
+                <div class="ops-section-head borderless">
+                    <div>
+                        <h2 class="ops-section-title">Message templates</h2>
+                        <p class="ops-section-copy">Reusable starting points for common student-support communication.</p>
+                    </div>
+                </div>
+                <div class="ops-section-body">
+                    <div class="ops-list mb-4">
+                        {% for item in templates %}
+                            <div class="ops-list-item">
+                                <div class="ops-list-title">{{ item.name }}</div>
+                                <div class="ops-list-meta">{{ item.get_template_type_display }} | {{ item.get_audience_display }}{% if not item.is_active %} | Inactive{% endif %}</div>
+                                <div class="small text-muted mt-2"><strong>Subject:</strong> {{ item.subject_template }}</div>
+                                <div class="small text-muted mt-1">{{ item.body_template|truncatechars:180 }}</div>
+                            </div>
+                        {% empty %}
+                            <div class="empty-state-panel compact">
+                                <div class="empty-state-title">No templates yet</div>
+                                <div class="empty-state-copy">Add a few reusable communication templates to speed up frequent staff replies.</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% if role_flags.is_admin or role_flags.is_counsellor %}
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="row g-3">
+                                {% for field in template_form %}
+                                    <div class="{% if field.name == 'body_template' %}col-12{% else %}col-md-6{% endif %}">
+                                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                        {{ field }}
+                                        {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="mt-3">
+                                <button class="btn btn-primary" type="submit">Save template</button>
+                            </div>
+                        </form>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
