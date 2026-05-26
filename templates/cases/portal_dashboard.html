@@ -1,266 +1,288 @@
 {% extends "base.html" %}
 {% block title %}My Portal | UIS Student Record System{% endblock %}
 {% block content %}
-<section class="hero-shell mb-4">
-    <div class="hero-panel portal-hero">
-        <div>
-            <span class="eyebrow">Student Portal</span>
-            <h1 class="display-title mb-2">Welcome back, {{ student.full_name }}.</h1>
-            <p class="hero-copy mb-0">Track your requests, watch for school updates, and keep an eye on your next important steps in one place.</p>
-        </div>
-        <div class="hero-actions">
-            <div class="hero-meta-chip">{{ student.student_id }}</div>
-            <div class="hero-meta-chip">Grade {{ student.grade }}</div>
-            <a class="btn btn-primary premium-btn" href="{% url 'portal_request_create' %}">Submit New Request</a>
-        </div>
-    </div>
-</section>
-
-<div class="row g-4 mb-4">
-    <div class="col-xl-8">
-        <div class="card shadow-sm premium-card h-100">
-            <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">What to do next</span>
-                <h2 class="section-title mb-1">Your checklist for this week</h2>
-                <p class="section-subtitle mb-0">A quick guide to help you stay on top of requests, documents, and school follow-up.</p>
+<section class="student-portal-shell">
+    <section class="student-hero-card">
+        <div class="student-hero-copy">
+            <div class="student-eyebrow">Student Portal</div>
+            <h1 class="student-hero-title">Welcome back, {{ student.full_name }}.</h1>
+            <p class="student-hero-subtitle">Use this space to track support requests, school updates, and the next steps that matter for you.</p>
+            <div class="student-hero-meta">
+                <span class="student-meta-pill">{{ student.student_id }}</span>
+                <span class="student-meta-pill">Grade {{ student.grade }}</span>
+                {% if student.assigned_counsellor %}
+                    <span class="student-meta-pill">Counsellor: {{ student.assigned_counsellor.get_full_name }}</span>
+                {% endif %}
             </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    {% for step in student_next_steps %}
-                        <div class="col-md-4">
-                            <div class="next-step-card {% if step.done %}is-done{% endif %}">
-                                <div class="next-step-status">{% if step.done %}Done{% else %}Next{% endif %}</div>
-                                <h3>{{ step.title }}</h3>
-                                <p class="mb-0">{{ step.body }}</p>
+        </div>
+        <div class="student-hero-actions">
+            <a class="btn btn-primary premium-btn student-primary-action" href="{% url 'portal_request_create' %}">Submit New Request</a>
+            {% if next_session %}
+                <div class="student-hero-sidecard">
+                    <div class="student-sidecard-label">Next session</div>
+                    <div class="student-sidecard-value">{{ next_session.start_at|date:"M j, Y g:i A" }}</div>
+                    <div class="student-sidecard-copy">{{ next_session.get_session_type_display }}</div>
+                </div>
+            {% else %}
+                <div class="student-hero-sidecard soft">
+                    <div class="student-sidecard-label">Next session</div>
+                    <div class="student-sidecard-value">Nothing booked</div>
+                    <div class="student-sidecard-copy">You can request support whenever you need it.</div>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="student-overview-grid">
+        <div class="student-panel student-priority-panel">
+            <div class="student-panel-header">
+                <div>
+                    <div class="student-section-kicker">What matters now</div>
+                    <h2 class="student-section-title">Your next steps</h2>
+                </div>
+            </div>
+            <div class="student-next-steps">
+                {% for step in student_next_steps %}
+                    <article class="student-step-card {% if step.done %}is-complete{% endif %}">
+                        <div class="student-step-state">{% if step.done %}Done{% else %}Next{% endif %}</div>
+                        <h3>{{ step.title }}</h3>
+                        <p>{{ step.body }}</p>
+                    </article>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="student-panel student-status-panel">
+            <div class="student-panel-header">
+                <div>
+                    <div class="student-section-kicker">Status</div>
+                    <h2 class="student-section-title">At a glance</h2>
+                </div>
+            </div>
+            <div class="student-stat-stack">
+                <div class="student-stat-card">
+                    <div class="student-stat-label">Open requests</div>
+                    <div class="student-stat-value">{{ requests|length }}</div>
+                </div>
+                <div class="student-stat-card">
+                    <div class="student-stat-label">Booked sessions</div>
+                    <div class="student-stat-value">{{ sessions|length }}</div>
+                </div>
+                <div class="student-stat-card">
+                    <div class="student-stat-label">Missing documents</div>
+                    <div class="student-stat-value">{{ missing_documents|length }}</div>
+                </div>
+            </div>
+            {% if open_request %}
+                <div class="student-highlight-card">
+                    <div class="student-highlight-label">Latest active request</div>
+                    <div class="student-highlight-title">{{ open_request.title }}</div>
+                    <div class="student-highlight-copy">{{ open_request.get_request_type_display }} | {{ open_request.get_status_display }}</div>
+                </div>
+            {% else %}
+                <div class="student-quiet-note">You do not have any active requests right now.</div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="student-main-grid">
+        <div class="student-main-column">
+            <div class="student-panel">
+                <div class="student-panel-header">
+                    <div>
+                        <div class="student-section-kicker">Profile</div>
+                        <h2 class="student-section-title">My Information</h2>
+                    </div>
+                </div>
+                <div class="student-info-grid">
+                    <div class="student-info-item">
+                        <div class="student-info-label">Preferred language</div>
+                        <div class="student-info-value">{{ student.preferred_language|default:"Not set" }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Nationality</div>
+                        <div class="student-info-value">{{ student.nationality }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Assigned counsellor</div>
+                        <div class="student-info-value">{{ student.assigned_counsellor.get_full_name|default:"Not assigned yet" }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Agency</div>
+                        <div class="student-info-value">{{ student.agency|default:"Not set" }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Academic status</div>
+                        <div class="student-info-value">{{ student.get_academic_status_display }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Application status</div>
+                        <div class="student-info-value">{{ student.get_university_application_status_display }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Payment status</div>
+                        <div class="student-info-value">{{ student.get_payment_status_display }}</div>
+                    </div>
+                    <div class="student-info-item">
+                        <div class="student-info-label">Homestay status</div>
+                        <div class="student-info-value">{{ student.get_homestay_status_display }}</div>
+                    </div>
+                </div>
+                {% if student.internal_summary %}
+                    <div class="student-summary-box">
+                        <div class="student-info-label">Current summary</div>
+                        <p class="mb-0">{{ student.internal_summary|linebreaksbr }}</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="student-panel">
+                <div class="student-panel-header">
+                    <div>
+                        <div class="student-section-kicker">Requests</div>
+                        <h2 class="student-section-title">My Requests</h2>
+                    </div>
+                </div>
+                <div class="student-request-list">
+                    {% for item in requests %}
+                        <article class="student-request-card">
+                            <div class="student-request-topline">
+                                <div>
+                                    <div class="student-request-type">{{ item.get_request_type_display }}</div>
+                                    <h3 class="student-request-title">{{ item.title }}</h3>
+                                </div>
+                                <span class="badge {% if item.status == 'new' %}text-bg-warning{% elif item.status == 'approved' %}text-bg-success{% elif item.status == 'declined' %}text-bg-danger{% elif item.status == 'completed' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
+                                    {{ item.get_status_display }}
+                                </span>
                             </div>
+                            <p class="student-request-copy">{{ item.details|default:"No details provided."|truncatechars:160 }}</p>
+                            <div class="student-request-meta">
+                                <span>Submitted {{ item.created_at|date:"M j, Y" }}</span>
+                                <span>{{ item.attachments.count }} file{{ item.attachments.count|pluralize }}</span>
+                                {% if item.responses.last %}
+                                    {% with latest_response=item.responses.last %}
+                                        <span>
+                                            Email update:
+                                            {% if latest_response.sent_at %}
+                                                Sent
+                                            {% elif latest_response.send_requested_at %}
+                                                Queued
+                                            {% else %}
+                                                Saved
+                                            {% endif %}
+                                        </span>
+                                    {% endwith %}
+                                {% else %}
+                                    <span>No school reply yet</span>
+                                {% endif %}
+                            </div>
+                        </article>
+                    {% empty %}
+                        <div class="student-empty-state">
+                            <div class="student-empty-title">No requests yet</div>
+                            <div class="student-empty-copy">When you submit a transcript or counselling request, it will appear here.</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="student-panel">
+                <div class="student-panel-header">
+                    <div>
+                        <div class="student-section-kicker">Academics</div>
+                        <h2 class="student-section-title">My Term History</h2>
+                    </div>
+                </div>
+                <div class="student-term-list">
+                    {% for record in term_records %}
+                        <article class="student-term-card">
+                            <div class="student-term-head">
+                                <div>
+                                    <h3 class="student-term-title">{{ record.term }}</h3>
+                                    {% if record.term.start_date and record.term.end_date %}
+                                        <div class="student-term-dates">{{ record.term.start_date }} to {{ record.term.end_date }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="student-term-summary">
+                                <p><strong>Academic:</strong> {{ record.academic_summary|default:"No academic summary yet." }}</p>
+                                <p><strong>Attendance:</strong> {{ record.attendance_summary|default:"No attendance update yet." }}</p>
+                                <p><strong>Counselling:</strong> {{ record.counselling_summary|default:"No counselling update yet." }}</p>
+                            </div>
+                            <div class="student-course-list">
+                                {% for course in record.courses.all %}
+                                    <div class="student-course-item">
+                                        <div>
+                                            <div class="student-course-name">{{ course.course_name }}</div>
+                                            <div class="student-course-meta">{{ course.course_code|default:"No code" }}{% if course.teacher_name %} | {{ course.teacher_name }}{% endif %}</div>
+                                        </div>
+                                        <div class="student-course-mark">{{ course.current_mark|default:"-" }}</div>
+                                    </div>
+                                {% empty %}
+                                    <div class="student-empty-inline">No courses recorded yet.</div>
+                                {% endfor %}
+                            </div>
+                        </article>
+                    {% empty %}
+                        <div class="student-empty-state">
+                            <div class="student-empty-title">No term history yet</div>
+                            <div class="student-empty-copy">Your school team has not shared any term updates yet.</div>
                         </div>
                     {% endfor %}
                 </div>
             </div>
         </div>
-    </div>
-    <div class="col-xl-4">
-        <div class="card shadow-sm premium-card h-100">
-            <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">At a glance</span>
-                <h2 class="section-title mb-1">Your current status</h2>
-            </div>
-            <div class="card-body">
-                <div class="mini-stat-grid mb-4">
-                    <div class="mini-stat-card">
-                        <div class="mini-stat-label">Open requests</div>
-                        <div class="mini-stat-value">{{ requests|length }}</div>
-                    </div>
-                    <div class="mini-stat-card">
-                        <div class="mini-stat-label">Booked sessions</div>
-                        <div class="mini-stat-value">{{ sessions|length }}</div>
-                    </div>
-                    <div class="mini-stat-card">
-                        <div class="mini-stat-label">Missing documents</div>
-                        <div class="mini-stat-value">{{ missing_documents|length }}</div>
-                    </div>
-                </div>
-                {% if next_session %}
-                    <div class="status-panel mb-3">
-                        <div class="status-label">Next session</div>
-                        <div class="status-value">{{ next_session.start_at|date:"M j, Y g:i A" }}</div>
-                        <div class="status-detail">{{ next_session.get_session_type_display }} with {{ next_session.counsellor.get_full_name|default:"the counselling team" }}</div>
-                    </div>
-                {% endif %}
-                {% if open_request %}
-                    <div class="status-panel subtle">
-                        <div class="status-label">Latest open request</div>
-                        <div class="status-value">{{ open_request.title }}</div>
-                        <div class="status-detail">{{ open_request.get_request_type_display }} | {{ open_request.get_status_display }}</div>
-                    </div>
-                {% endif %}
-                {% if not next_session and not open_request %}
-                    <p class="text-muted mb-0">You do not have any upcoming sessions or active requests right now.</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
 
-<div class="row g-4 mb-4">
-    <div class="col-lg-6">
-        <div class="card shadow-sm premium-card h-100">
-            <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">Profile</span>
-                <h2 class="section-title mb-0">My Information</h2>
-            </div>
-            <div class="card-body">
-                <div class="info-grid">
-                    <div><span class="info-label">Preferred language</span><span class="info-value">{{ student.preferred_language|default:"Not set" }}</span></div>
-                    <div><span class="info-label">Nationality</span><span class="info-value">{{ student.nationality }}</span></div>
-                    <div><span class="info-label">Assigned counsellor</span><span class="info-value">{{ student.assigned_counsellor.get_full_name|default:"Not assigned yet" }}</span></div>
-                    <div><span class="info-label">Agency</span><span class="info-value">{{ student.agency|default:"Not set" }}</span></div>
-                    <div><span class="info-label">Academic status</span><span class="info-value">{{ student.get_academic_status_display }}</span></div>
-                    <div><span class="info-label">Application status</span><span class="info-value">{{ student.get_university_application_status_display }}</span></div>
-                    <div><span class="info-label">Payment status</span><span class="info-value">{{ student.get_payment_status_display }}</span></div>
-                    <div><span class="info-label">Homestay status</span><span class="info-value">{{ student.get_homestay_status_display }}</span></div>
+        <aside class="student-side-column">
+            <div class="student-panel">
+                <div class="student-panel-header">
+                    <div>
+                        <div class="student-section-kicker">Documents</div>
+                        <h2 class="student-section-title">Important documents</h2>
+                    </div>
                 </div>
-                {% if student.internal_summary %}
-                    <div class="soft-divider"></div>
-                    <span class="info-label d-block mb-2">Current summary</span>
-                    <p class="mb-0">{{ student.internal_summary|linebreaksbr }}</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="card shadow-sm premium-card h-100">
-            <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">Checklist</span>
-                <h2 class="section-title mb-0">Important documents</h2>
-            </div>
-            <div class="card-body">
                 {% if missing_documents %}
-                    <div class="callout-warning mb-3">The school is still waiting for the items below.</div>
-                    <div class="stacked-list">
+                    <div class="student-warning-banner">The school is still waiting for the items below.</div>
+                    <div class="student-document-list">
                         {% for document in missing_documents %}
-                            <div class="stacked-list-item">
-                                <div class="fw-semibold">{{ document.document_name }}</div>
-                                <div class="small text-muted">{% if document.due_date %}Due {{ document.due_date }}{% else %}No due date set yet{% endif %}</div>
+                            <div class="student-document-item">
+                                <div class="student-document-name">{{ document.document_name }}</div>
+                                <div class="student-document-meta">{% if document.due_date %}Due {{ document.due_date }}{% else %}No due date set yet{% endif %}</div>
                             </div>
                         {% endfor %}
                     </div>
                 {% else %}
-                    <div class="empty-state-panel">
-                        <div class="empty-state-title">All clear for now</div>
-                        <div class="empty-state-copy">No missing documents are listed on your record right now.</div>
+                    <div class="student-empty-state compact">
+                        <div class="student-empty-title">All clear for now</div>
+                        <div class="student-empty-copy">No missing documents are listed on your record right now.</div>
                     </div>
                 {% endif %}
             </div>
-        </div>
-    </div>
-</div>
 
-<div class="row g-4">
-    <div class="col-xl-7">
-        <div class="card shadow-sm premium-card mb-4">
-            <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">Requests</span>
-                <h2 class="section-title mb-1">My Requests</h2>
-                <p class="section-subtitle mb-0">See what you asked for, where it stands, and whether the school has emailed you an update.</p>
-            </div>
-            <div class="table-responsive premium-table">
-                <table class="table mb-0">
-                    <thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Files</th><th>Email Updates</th><th>Submitted</th></tr></thead>
-                    <tbody>
-                        {% for item in requests %}
-                            <tr>
-                                <td>{{ item.get_request_type_display }}</td>
-                                <td>
-                                    <div class="fw-semibold">{{ item.title }}</div>
-                                    <div class="small text-muted">{{ item.details|truncatechars:90 }}</div>
-                                </td>
-                                <td>
-                                    <span class="badge {% if item.status == 'new' %}text-bg-warning{% elif item.status == 'approved' %}text-bg-success{% elif item.status == 'declined' %}text-bg-danger{% elif item.status == 'completed' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
-                                        {{ item.get_status_display }}
-                                    </span>
-                                </td>
-                                <td>{{ item.attachments.count }}</td>
-                                <td>
-                                    {% if item.responses.last %}
-                                        {% with latest_response=item.responses.last %}
-                                            {% if latest_response.sent_at %}
-                                                <span class="badge text-bg-success">Sent</span>
-                                            {% elif latest_response.send_requested_at %}
-                                                <span class="badge text-bg-warning">Queued</span>
-                                            {% else %}
-                                                <span class="badge text-bg-secondary">Saved</span>
-                                            {% endif %}
-                                        {% endwith %}
-                                    {% else %}
-                                        <span class="text-muted small">None yet</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ item.created_at|date:"M j, Y" }}</td>
-                            </tr>
-                        {% empty %}
-                            <tr><td colspan="6" class="text-center text-muted py-4">No requests yet.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card shadow-sm premium-card">
-            <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">Academics</span>
-                <h2 class="section-title mb-1">My Term History</h2>
-                <p class="section-subtitle mb-0">A term-by-term view of your school updates and course information.</p>
-            </div>
-            <div class="card-body">
-                {% for record in term_records %}
-                    <div class="timeline-card">
-                        <div class="timeline-head">
-                            <div>
-                                <h3 class="timeline-title">{{ record.term }}</h3>
-                                {% if record.term.start_date and record.term.end_date %}
-                                    <div class="small text-muted">{{ record.term.start_date }} to {{ record.term.end_date }}</div>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="timeline-copy">
-                            <p><strong>Academic:</strong> {{ record.academic_summary|default:"No academic summary yet." }}</p>
-                            <p><strong>Attendance:</strong> {{ record.attendance_summary|default:"No attendance update yet." }}</p>
-                            <p><strong>Counselling:</strong> {{ record.counselling_summary|default:"No counselling update yet." }}</p>
-                        </div>
-                        <div class="table-responsive premium-table compact-table">
-                            <table class="table table-sm mb-0">
-                                <thead><tr><th>Course</th><th>Code</th><th>Teacher</th><th>Mark</th></tr></thead>
-                                <tbody>
-                                    {% for course in record.courses.all %}
-                                        <tr>
-                                            <td>{{ course.course_name }}</td>
-                                            <td>{{ course.course_code|default:"-" }}</td>
-                                            <td>{{ course.teacher_name|default:"-" }}</td>
-                                            <td>{{ course.current_mark|default:"-" }}</td>
-                                        </tr>
-                                    {% empty %}
-                                        <tr><td colspan="4" class="text-center text-muted">No courses recorded yet.</td></tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
+            <div class="student-panel">
+                <div class="student-panel-header">
+                    <div>
+                        <div class="student-section-kicker">Sessions</div>
+                        <h2 class="student-section-title">My Sessions</h2>
                     </div>
-                {% empty %}
-                    <div class="empty-state-panel">
-                        <div class="empty-state-title">No term history yet</div>
-                        <div class="empty-state-copy">Your school team has not shared any term updates yet.</div>
-                    </div>
-                {% endfor %}
+                </div>
+                <div class="student-session-list">
+                    {% for session in sessions %}
+                        <article class="student-session-card">
+                            <div class="student-session-when">{{ session.start_at|date:"M j, Y g:i A" }}</div>
+                            <div class="student-session-type">{{ session.get_session_type_display }}</div>
+                            <div class="student-session-meta">{{ session.get_status_display }}</div>
+                            <a class="btn btn-sm btn-outline-primary premium-btn-outline mt-3" href="{% url 'session_reschedule' session.reschedule_token %}">Request change</a>
+                        </article>
+                    {% empty %}
+                        <div class="student-empty-state compact">
+                            <div class="student-empty-title">No sessions booked yet</div>
+                            <div class="student-empty-copy">Once a counselling slot is booked, it will appear here.</div>
+                        </div>
+                    {% endfor %}
+                </div>
             </div>
-        </div>
-    </div>
-
-    <div class="col-xl-5">
-        <div class="card shadow-sm premium-card">
-            <div class="card-header bg-white border-0 pb-0">
-                <span class="section-kicker">Sessions</span>
-                <h2 class="section-title mb-1">My Sessions</h2>
-                <p class="section-subtitle mb-0">Keep track of booked appointments and request a change if your time no longer works.</p>
-            </div>
-            <div class="table-responsive premium-table">
-                <table class="table mb-0">
-                    <thead><tr><th>When</th><th>Type</th><th>Status</th><th></th></tr></thead>
-                    <tbody>
-                        {% for session in sessions %}
-                            <tr>
-                                <td>{{ session.start_at|date:"M j, Y g:i A" }}</td>
-                                <td>{{ session.get_session_type_display }}</td>
-                                <td>{{ session.get_status_display }}</td>
-                                <td><a class="btn btn-sm btn-outline-primary premium-btn-outline" href="{% url 'session_reschedule' session.reschedule_token %}">Request change</a></td>
-                            </tr>
-                        {% empty %}
-                            <tr><td colspan="4" class="text-center text-muted py-4">No sessions booked yet.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
+        </aside>
+    </section>
+</section>
 {% endblock %}
