@@ -11,21 +11,39 @@
             <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All</option>{% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
             <div class="col-md-3"><label class="form-label">Priority</label><select class="form-select" name="priority"><option value="">All</option>{% for value, label in priority_choices %}<option value="{{ value }}" {% if request.GET.priority == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
             <div class="col-md-3"><label class="form-label">Assigned counsellor</label><select class="form-select" name="assigned_to"><option value="">All</option>{% for counsellor in counsellors %}<option value="{{ counsellor.id }}" {% if request.GET.assigned_to == counsellor.id|stringformat:"s" %}selected{% endif %}>{{ counsellor.get_full_name|default:counsellor.username }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label">Section</label><select class="form-select" name="scope"><option value="active" {% if current_scope == 'active' %}selected{% endif %}>Active queue</option><option value="history" {% if current_scope == 'history' %}selected{% endif %}>Closed history</option></select></div>
             <div class="col-md-3 d-flex align-items-end gap-2"><button class="btn btn-primary" type="submit">Apply</button><a class="btn btn-outline-secondary" href="{% url 'task_list' %}">Reset</a></div>
         </form>
     </div>
 </div>
 <div class="card shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3 flex-wrap">
+        <div>
+            <h2 class="h5 mb-1">{% if current_scope == "history" %}Closed task history{% else %}Active task queue{% endif %}</h2>
+            <p class="text-muted small mb-0">{% if current_scope == "history" %}Archived tasks stay here for reference once they are no longer part of the working queue.{% else %}Keep only current follow-ups here so the team can scan work quickly.{% endif %}</p>
+        </div>
+        <div class="d-flex gap-3 small text-muted">
+            <span><strong class="text-dark">{{ active_task_count }}</strong> active</span>
+            <span><strong class="text-dark">{{ closed_task_count }}</strong> closed</span>
+        </div>
+    </div>
     <div class="table-responsive">
         <table class="table align-middle mb-0">
-            <thead><tr><th>Task</th><th>Student</th><th>Assigned to</th><th>Due date</th><th>Priority</th><th>Status</th><th>Update</th></tr></thead>
+            <thead><tr><th>Task</th><th>Student</th><th>Assigned to</th><th>{% if current_scope == 'history' %}Closed{% else %}Due date{% endif %}</th><th>Priority</th><th>Status</th><th>Update</th></tr></thead>
             <tbody>
                 {% for task in tasks %}
                     <tr>
                         <td>{{ task.title }}<div class="small text-muted">{{ task.description|truncatechars:70 }}</div></td>
                         <td><a href="{{ task.student.get_absolute_url }}">{{ task.student.full_name }}</a></td>
                         <td>{{ task.assigned_to.get_full_name|default:"Unassigned" }}</td>
-                        <td>{{ task.due_date }}</td>
+                        <td>
+                            {% if current_scope == "history" %}
+                                {{ task.closed_at|date:"M j, Y g:i A"|default:"-" }}
+                                {% if task.closed_by %}<div class="small text-muted">by {{ task.closed_by.get_full_name|default:task.closed_by.username }}</div>{% endif %}
+                            {% else %}
+                                {{ task.due_date }}
+                            {% endif %}
+                        </td>
                         <td>{{ task.get_priority_display }}</td>
                         <td>{{ task.get_status_display }}</td>
                         <td>
@@ -33,18 +51,24 @@
                                 <form method="post" class="d-flex gap-2">
                                     {% csrf_token %}
                                     <input type="hidden" name="task_id" value="{{ task.id }}">
-                                    <select class="form-select form-select-sm" name="status">
-                                        {% for value, label in status_choices %}
-                                            <option value="{{ value }}" {% if task.status == value %}selected{% endif %}>{{ label }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
+                                    {% if current_scope == 'history' %}
+                                        <input type="hidden" name="action" value="reopen">
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Reopen</button>
+                                    {% else %}
+                                        <select class="form-select form-select-sm" name="status">
+                                            {% for value, label in status_choices %}
+                                                <option value="{{ value }}" {% if task.status == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
+                                        <button class="btn btn-sm btn-outline-dark" type="submit" name="action" value="close">Close</button>
+                                    {% endif %}
                                 </form>
                             {% endif %}
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="7" class="text-center text-muted py-5">No tasks found.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-5">{% if current_scope == "history" %}No closed tasks yet.{% else %}No tasks found in the active queue.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

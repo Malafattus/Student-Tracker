@@ -247,6 +247,15 @@ class FollowUpTask(TimeStampedModel):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_OPEN)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default=PRIORITY_MEDIUM)
     completed_at = models.DateTimeField(blank=True, null=True)
+    is_closed = models.BooleanField(default=False)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="closed_follow_up_tasks",
+    )
+    closed_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ["due_date", "-created_at"]
@@ -413,6 +422,15 @@ class CounsellingSession(TimeStampedModel):
     confirmation_sent_at = models.DateTimeField(blank=True, null=True)
     reminder_sent_at = models.DateTimeField(blank=True, null=True)
     reschedule_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    is_closed = models.BooleanField(default=False)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="closed_counselling_sessions",
+    )
+    closed_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ["start_at"]

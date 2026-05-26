@@ -98,14 +98,26 @@
             {% endif %}
         </div>
         <div class="col-lg-7">
-            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Task list</h2></div><div class="table-responsive">
+            <div class="card shadow-sm mb-4"><div class="card-header bg-white"><h2 class="h5 mb-0">Active tasks</h2></div><div class="table-responsive">
                 <table class="table mb-0">
                     <thead><tr><th>Task</th><th>Due</th><th>Priority</th><th>Status</th></tr></thead>
                     <tbody>
-                        {% for task in student.tasks.all %}
+                        {% for task in active_tasks %}
                             <tr><td>{{ task.title }}</td><td>{{ task.due_date }}</td><td>{{ task.get_priority_display }}</td><td>{{ task.get_status_display }}</td></tr>
                         {% empty %}
-                            <tr><td colspan="4" class="text-muted text-center py-4">No tasks yet.</td></tr>
+                            <tr><td colspan="4" class="text-muted text-center py-4">No active tasks.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div></div>
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Closed task history</h2></div><div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Task</th><th>Closed</th><th>Priority</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for task in closed_tasks %}
+                            <tr><td>{{ task.title }}</td><td>{{ task.closed_at|date:"M j, Y"|default:"-" }}</td><td>{{ task.get_priority_display }}</td><td>{{ task.get_status_display }}</td></tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-muted text-center py-4">No closed tasks yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -177,11 +189,11 @@
             {% endif %}
         </div>
         <div class="col-lg-7">
-            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Session history</h2></div><div class="table-responsive">
+            <div class="card shadow-sm mb-4"><div class="card-header bg-white"><h2 class="h5 mb-0">Active sessions</h2></div><div class="table-responsive">
                 <table class="table mb-0">
                     <thead><tr><th>Slot</th><th>Type</th><th>Status</th><th>Counsellor</th></tr></thead>
                     <tbody>
-                        {% for session in student.sessions.all %}
+                        {% for session in active_sessions %}
                             <tr>
                                 <td>{{ session.start_at|date:"M j, Y g:i A" }}</td>
                                 <td>{{ session.get_session_type_display }}</td>
@@ -189,7 +201,24 @@
                                 <td>{{ session.counsellor.get_full_name|default:"Unassigned" }}</td>
                             </tr>
                         {% empty %}
-                            <tr><td colspan="4" class="text-center text-muted py-4">No sessions yet.</td></tr>
+                            <tr><td colspan="4" class="text-center text-muted py-4">No active sessions.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div></div>
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Closed session history</h2></div><div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Slot</th><th>Type</th><th>Status</th><th>Closed</th></tr></thead>
+                    <tbody>
+                        {% for session in closed_sessions %}
+                            <tr>
+                                <td>{{ session.start_at|date:"M j, Y g:i A" }}</td>
+                                <td>{{ session.get_session_type_display }}</td>
+                                <td>{{ session.get_status_display }}</td>
+                                <td>{{ session.closed_at|date:"M j, Y"|default:"-" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-4">No closed sessions yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

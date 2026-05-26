@@ -2,7 +2,7 @@ from django.contrib.auth.models import Group, User
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import CounsellingSession, PreparedReport, SessionChangeRequest, Student, StudentPortalAccess, StudentRequest
+from .models import CounsellingSession, FollowUpTask, PreparedReport, SessionChangeRequest, Student, StudentPortalAccess, StudentRequest
 from .permissions import ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_STUDENT, ensure_roles
 
 
@@ -235,3 +235,46 @@ class CaseTrackerSmokeTests(TestCase):
         report.refresh_from_db()
         self.assertFalse(report.is_closed)
         self.assertIsNone(report.closed_at)
+
+    def test_counsellor_can_close_and_reopen_task(self):
+        task = FollowUpTask.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            created_by=self.counsellor,
+            title="Follow up with family",
+            due_date="2026-06-10",
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        close_response = client.post(reverse("task_list"), {"task_id": task.pk, "action": "close"})
+        self.assertRedirects(close_response, reverse("task_list"))
+        task.refresh_from_db()
+        self.assertTrue(task.is_closed)
+        self.assertIsNotNone(task.closed_at)
+
+        reopen_response = client.post(reverse("task_list"), {"task_id": task.pk, "action": "reopen"})
+        self.assertRedirects(reopen_response, reverse("task_list"))
+        task.refresh_from_db()
+        self.assertFalse(task.is_closed)
+        self.assertIsNone(task.closed_at)
+
+    def test_counsellor_can_close_and_reopen_session(self):
+        session = CounsellingSession.objects.create(
+            student=self.student,
+            counsellor=self.counsellor,
+            start_at="2026-06-01T14:00:00Z",
+            end_at="2026-06-01T14:30:00Z",
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        close_response = client.post(reverse("session_list"), {"session_id": session.pk, "action": "close"})
+        self.assertRedirects(close_response, reverse("session_list"))
+        session.refresh_from_db()
+        self.assertTrue(session.is_closed)
+        self.assertIsNotNone(session.closed_at)
+
+        reopen_response = client.post(reverse("session_list"), {"session_id": session.pk, "action": "reopen"})
+        self.assertRedirects(reopen_response, reverse("session_list"))
+        session.refresh_from_db()
+        self.assertFalse(session.is_closed)
+        self.assertIsNone(session.closed_at)

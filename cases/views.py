@@ -190,6 +190,46 @@ def reopen_report_item(report):
     report.save(update_fields=["is_closed", "closed_by", "closed_at", "updated_at"])
 
 
+def task_queryset_for_user(user):
+    return FollowUpTask.objects.select_related("student", "assigned_to", "created_by", "closed_by").filter(
+        student__in=student_queryset_for_user(user)
+    )
+
+
+def close_task_item(task, user):
+    task.is_closed = True
+    task.closed_by = user
+    task.closed_at = timezone.now()
+    task.save(update_fields=["is_closed", "closed_by", "closed_at", "updated_at"])
+
+
+def reopen_task_item(task):
+    task.is_closed = False
+    task.closed_by = None
+    task.closed_at = None
+    task.save(update_fields=["is_closed", "closed_by", "closed_at", "updated_at"])
+
+
+def session_queryset_for_user(user):
+    return CounsellingSession.objects.select_related("student", "counsellor", "linked_request", "closed_by").filter(
+        student__in=student_queryset_for_user(user)
+    )
+
+
+def close_session_item(session, user):
+    session.is_closed = True
+    session.closed_by = user
+    session.closed_at = timezone.now()
+    session.save(update_fields=["is_closed", "closed_by", "closed_at", "updated_at"])
+
+
+def reopen_session_item(session):
+    session.is_closed = False
+    session.closed_by = None
+    session.closed_at = None
+    session.save(update_fields=["is_closed", "closed_by", "closed_at", "updated_at"])
+
+
 def month_bounds(year, month):
     if month == 12:
         return date(year, month, 1), date(year + 1, 1, 1)
@@ -234,7 +274,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         today = timezone.localdate()
         students = student_queryset_for_user(self.request.user)
-        tasks = FollowUpTask.objects.filter(student__in=students).exclude(status=FollowUpTask.STATUS_DONE)
+        tasks = FollowUpTask.objects.filter(student__in=students, is_closed=False).exclude(status=FollowUpTask.STATUS_DONE)
         documents = DocumentRequirement.objects.filter(student__in=students)
 
         context["stats"] = {
@@ -251,6 +291,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             ).count(),
             "upcoming_sessions": CounsellingSession.objects.filter(
                 student__in=students,
+                is_closed=False,
                 status=CounsellingSession.STATUS_SCHEDULED,
                 start_at__date__gte=today,
             ).count(),
@@ -420,6 +461,10 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         active_requests = self.object.requests.exclude(status=StudentRequest.STATUS_CLOSED)
         closed_requests = self.object.requests.filter(status=StudentRequest.STATUS_CLOSED)
+        active_tasks = self.object.tasks.filter(is_closed=False)
+        closed_tasks = self.object.tasks.filter(is_closed=True)
+        active_sessions = self.object.sessions.filter(is_closed=False)
+        closed_sessions = self.object.sessions.filter(is_closed=True)
         active_reports = self.object.prepared_reports.filter(is_closed=False)
         closed_reports = self.object.prepared_reports.filter(is_closed=True)
         context["active_tab"] = self.request.GET.get("tab", "overview")
@@ -456,6 +501,10 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
         )
         context["active_requests"] = active_requests
         context["closed_requests"] = closed_requests
+        context["active_tasks"] = active_tasks
+        context["closed_tasks"] = closed_tasks
+        context["active_sessions"] = active_sessions
+        context["closed_sessions"] = closed_sessions
         context["active_reports"] = active_reports
         context["closed_reports"] = closed_reports
         return context
@@ -553,21 +602,34 @@ class TaskListView(LoginRequiredMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        tasks = FollowUpTask.objects.select_related("student", "assigned_to", "created_by").filter(
-            student__in=student_queryset_for_user(self.request.user)
-        )
+        self.current_scope = self.request.GET.get("scope", "active")
+        tasks = task_queryset_for_user(self.request.user)
         if self.request.GET.get("status"):
             tasks = tasks.filter(status=self.request.GET["status"])
         if self.request.GET.get("priority"):
             tasks = tasks.filter(priority=self.request.GET["priority"])
         if self.request.GET.get("assigned_to"):
             tasks = tasks.filter(assigned_to_id=self.request.GET["assigned_to"])
-        return tasks.order_by("due_date", "priority")
+        self.filtered_tasks = tasks
+        if self.current_scope == "history":
+            return tasks.filter(is_closed=True).order_by("-closed_at", "-updated_at")
+        return tasks.filter(is_closed=False).order_by("due_date", "priority")
 
     def post(self, request, *args, **kwargs):
-        task = get_object_or_404(FollowUpTask, pk=request.POST.get("task_id"), student__in=student_queryset_for_user(request.user))
+        task = get_object_or_404(task_queryset_for_user(request.user), pk=request.POST.get("task_id"))
         if not can_edit_student(request.user, task.student):
             messages.error(request, "You do not have permission to update this task.")
+            return redirect("task_list")
+        action = request.POST.get("action")
+        if action == "close":
+            close_task_item(task, request.user)
+            log_audit(request.user, "updated", task, {"section": "task_closed"})
+            messages.success(request, "Task moved to history.")
+            return redirect("task_list")
+        if action == "reopen":
+            reopen_task_item(task)
+            log_audit(request.user, "updated", task, {"section": "task_reopened"})
+            messages.success(request, "Task returned to the active queue.")
             return redirect("task_list")
         task.status = request.POST.get("status", task.status)
         if task.status == FollowUpTask.STATUS_DONE:
@@ -579,9 +641,13 @@ class TaskListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        filtered_tasks = getattr(self, "filtered_tasks", task_queryset_for_user(self.request.user))
         context["status_choices"] = FollowUpTask.STATUS_CHOICES
         context["priority_choices"] = FollowUpTask.PRIORITY_CHOICES
         context["counsellors"] = User.objects.filter(groups__name="Counsellor")
+        context["current_scope"] = getattr(self, "current_scope", "active")
+        context["active_task_count"] = filtered_tasks.filter(is_closed=False).count()
+        context["closed_task_count"] = filtered_tasks.filter(is_closed=True).count()
         return context
 
 
@@ -859,18 +925,32 @@ class SessionListView(LoginRequiredMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        queryset = CounsellingSession.objects.select_related("student", "counsellor", "linked_request")
-        queryset = queryset.filter(student__in=student_queryset_for_user(self.request.user))
+        self.current_scope = self.request.GET.get("scope", "active")
+        queryset = session_queryset_for_user(self.request.user)
         if self.request.GET.get("status"):
             queryset = queryset.filter(status=self.request.GET["status"])
         if self.request.GET.get("session_type"):
             queryset = queryset.filter(session_type=self.request.GET["session_type"])
-        return queryset.order_by("start_at")
+        self.filtered_sessions = queryset
+        if self.current_scope == "history":
+            return queryset.filter(is_closed=True).order_by("-closed_at", "-start_at")
+        return queryset.filter(is_closed=False).order_by("start_at")
 
     def post(self, request, *args, **kwargs):
-        session = get_object_or_404(CounsellingSession, pk=request.POST.get("session_id"), student__in=student_queryset_for_user(request.user))
+        session = get_object_or_404(session_queryset_for_user(request.user), pk=request.POST.get("session_id"))
         if not can_edit_student(request.user, session.student):
             messages.error(request, "You do not have permission to send reminders for this session.")
+            return redirect("session_list")
+        action = request.POST.get("action")
+        if action == "close":
+            close_session_item(session, request.user)
+            log_audit(request.user, "updated", session, {"section": "session_closed"})
+            messages.success(request, "Session moved to history.")
+            return redirect("session_list")
+        if action == "reopen":
+            reopen_session_item(session)
+            log_audit(request.user, "updated", session, {"section": "session_reopened"})
+            messages.success(request, "Session returned to the active timetable.")
             return redirect("session_list")
         send_session_reminder(session)
         messages.success(request, "Reminder email sent if a recipient address was available.")
@@ -884,8 +964,8 @@ class SessionListView(LoginRequiredMixin, ListView):
         month = int(self.request.GET.get("month", today.month))
         year = int(self.request.GET.get("year", today.year))
         month_start, month_end = month_bounds(year, month)
-        month_sessions = CounsellingSession.objects.select_related("student", "counsellor").filter(
-            student__in=student_queryset_for_user(self.request.user),
+        month_sessions = session_queryset_for_user(self.request.user).filter(
+            is_closed=False,
             start_at__date__gte=month_start,
             start_at__date__lt=month_end,
         )
@@ -903,6 +983,10 @@ class SessionListView(LoginRequiredMixin, ListView):
         context["prev_month"] = (year - 1, 12) if month == 1 else (year, month - 1)
         context["next_month"] = (year + 1, 1) if month == 12 else (year, month + 1)
         context["pending_counselling_requests"] = pending_requests.order_by("preferred_date", "-created_at")[:12]
+        filtered_sessions = getattr(self, "filtered_sessions", session_queryset_for_user(self.request.user))
+        context["current_scope"] = getattr(self, "current_scope", "active")
+        context["active_session_count"] = filtered_sessions.filter(is_closed=False).count()
+        context["closed_session_count"] = filtered_sessions.filter(is_closed=True).count()
         return context
 
 
