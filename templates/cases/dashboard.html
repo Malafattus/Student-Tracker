@@ -27,7 +27,7 @@
 </div>
 
 <div class="row g-4 mb-4">
-    <div class="col-lg-7">
+    <div class="col-lg-6">
         <div class="card shadow-sm premium-card">
             <div class="card-header bg-white border-0 pb-0">
                 <span class="section-kicker">Workflow</span>
@@ -45,7 +45,7 @@
             </div>
         </div>
     </div>
-    <div class="col-lg-5">
+    <div class="col-lg-3">
         <div class="card shadow-sm premium-card h-100">
             <div class="card-header bg-white border-0 pb-0">
                 <span class="section-kicker">Focus</span>
@@ -61,6 +61,36 @@
                     <div class="status-label">Queue pressure</div>
                     <div class="status-value">{{ stats.open_requests }} open request{{ stats.open_requests|pluralize }}</div>
                     <div class="status-detail">Combine this with overdue tasks to spot students who need immediate staff attention.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3">
+        <div class="card shadow-sm premium-card h-100">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Progress</span>
+                <h2 class="section-title mb-1">Academic watchlist</h2>
+            </div>
+            <div class="card-body">
+                <div class="dashboard-chip-row mb-3">
+                    <span class="dashboard-chip">{{ academic_watch_counts.credits }} with credits remaining</span>
+                    <span class="dashboard-chip">{{ academic_watch_counts.volunteer }} with hours left</span>
+                    <span class="dashboard-chip">{{ academic_watch_counts.literacy }} with literacy still pending</span>
+                </div>
+                <div class="dashboard-quick-list">
+                    {% for item in academic_watchlist %}
+                        <div class="dashboard-quick-item">
+                            <div class="dashboard-quick-title"><a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a></div>
+                            <div class="dashboard-quick-meta">{{ item.student.support_team|default:"No team" }}</div>
+                            <div class="dashboard-chip-row">
+                                {% for issue in item.issues %}
+                                    <span class="dashboard-chip">{{ issue }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="empty-state-copy">No academic progress risks need attention right now.</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -215,6 +245,38 @@
                         <div class="mini-stat-card"><div class="mini-stat-label">Payment issues</div><div class="mini-stat-value">{{ stats.payment_issues }}</div></div>
                         <div class="mini-stat-card"><div class="mini-stat-label">Homestay issues</div><div class="mini-stat-value">{{ stats.homestay_issues }}</div></div>
                     </div>
+                    {% if access_request_summary %}
+                        <div class="card shadow-sm premium-card mb-4">
+                            <div class="card-header bg-white border-0 pb-0">
+                                <span class="section-kicker">Access</span>
+                                <h2 class="section-title mb-1">{{ access_request_summary.title }}</h2>
+                            </div>
+                            <div class="card-body">
+                                <div class="dashboard-quick-list">
+                                    {% for item in access_request_items %}
+                                        <div class="dashboard-quick-item">
+                                            <div class="dashboard-quick-title">
+                                                {% if role_flags.is_admin %}
+                                                    {{ item.counsellor.get_full_name|default:item.counsellor.username }}
+                                                {% else %}
+                                                    <a href="{{ item.student.get_absolute_url }}">{{ item.student.full_name }}</a>
+                                                {% endif %}
+                                            </div>
+                                            <div class="dashboard-quick-meta">
+                                                {% if role_flags.is_admin %}
+                                                    {{ item.student.full_name }} | {{ item.student.support_team|default:"No team" }}
+                                                {% else %}
+                                                    Requested on {{ item.created_at|date:"M j, Y" }}
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    {% empty %}
+                                        <div class="empty-state-copy">{{ access_request_summary.empty }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
                     <div class="card shadow-sm premium-card">
                         <div class="card-header bg-white border-0 pb-0">
                             <span class="section-kicker">Communications</span>

@@ -354,6 +354,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         tasks = FollowUpTask.objects.filter(student__in=students, is_closed=False).exclude(status=FollowUpTask.STATUS_DONE)
         documents = DocumentRequirement.objects.filter(student__in=students)
         overdue_reviews = students.filter(next_review_date__lt=today).order_by("next_review_date", "full_name")
+        student_list = list(students)
 
         context["stats"] = {
             "active_students": students.filter(is_active=True).count(),
@@ -437,6 +438,61 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["recent_audit_logs"] = AuditLog.objects.filter(
             Q(model_name="Student") | Q(model_name="FollowUpTask") | Q(model_name="StudentNote")
         )[:8]
+        context["academic_watch_counts"] = {
+            "credits": sum(1 for student in student_list if student.credits_remaining > 0),
+            "volunteer": sum(1 for student in student_list if student.volunteer_hours_remaining > 0),
+            "literacy": sum(
+                1
+                for student in student_list
+                if student.osslt_status in [Student.OSSLT_PENDING, Student.OSSLT_OLC4O]
+            ),
+        }
+
+        academic_watchlist = []
+        for student in student_list:
+            issues = []
+            score = 0
+            if student.credits_remaining > 0:
+                issues.append(f"{student.credits_remaining} credit{'s' if student.credits_remaining != 1 else ''} remaining")
+                score += student.credits_remaining * 3
+            if student.volunteer_hours_remaining > 0:
+                issues.append(
+                    f"{student.volunteer_hours_remaining} volunteer hour{'s' if student.volunteer_hours_remaining != 1 else ''} left"
+                )
+                score += student.volunteer_hours_remaining
+            if student.osslt_status == Student.OSSLT_PENDING:
+                issues.append("OSSLT still pending")
+                score += 8
+            elif student.osslt_status == Student.OSSLT_OLC4O:
+                issues.append("OLC4O still needs completion")
+                score += 6
+            if issues:
+                academic_watchlist.append({"student": student, "issues": issues[:3], "score": score})
+
+        context["academic_watchlist"] = sorted(
+            academic_watchlist,
+            key=lambda item: (-item["score"], item["student"].full_name),
+        )[:6]
+
+        access_request_base = CounsellorAccessRequest.objects.select_related("student", "counsellor", "reviewed_by")
+        if is_admin(self.request.user):
+            context["access_request_summary"] = {
+                "title": "Team access requests waiting for review",
+                "empty": "No cross-team access requests are waiting right now.",
+            }
+            context["access_request_items"] = access_request_base.filter(status=CounsellorAccessRequest.STATUS_PENDING)[:6]
+        elif is_counsellor(self.request.user):
+            context["access_request_summary"] = {
+                "title": "My team access requests",
+                "empty": "You do not have any team access requests waiting right now.",
+            }
+            context["access_request_items"] = access_request_base.filter(
+                counsellor=self.request.user,
+                status=CounsellorAccessRequest.STATUS_PENDING,
+            )[:6]
+        else:
+            context["access_request_summary"] = None
+            context["access_request_items"] = access_request_base.none()
         return context
 
 

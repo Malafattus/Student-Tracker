@@ -6,6 +6,7 @@ from .models import (
     AcademicTerm,
     CommunicationLog,
     CommunicationTemplate,
+    CounsellorAccessRequest,
     CounsellorProfile,
     CounsellorStudentAccess,
     CounsellingSession,
@@ -45,6 +46,33 @@ class CaseTrackerSmokeTests(TestCase):
         client.login(username="admin", password="pass12345")
         response = client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Academic watchlist")
+
+    def test_dashboard_shows_academic_watchlist_and_pending_access_request(self):
+        self.student.required_credits = 30
+        self.student.volunteer_hours_completed = 6
+        self.student.osslt_status = Student.OSSLT_PENDING
+        self.student.save()
+        other_student = Student.objects.create(
+            full_name="Other Team Student",
+            student_id="S7777",
+            grade="11",
+            nationality="Japan",
+            support_team="Japanese Team",
+            case_stage=Student.STAGE_ACTIVE,
+        )
+        CounsellorAccessRequest.objects.create(
+            counsellor=self.counsellor,
+            student=other_student,
+            reason="Need to help with transition planning.",
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Academic watchlist")
+        self.assertContains(response, "Test Student")
+        self.assertContains(response, "My team access requests")
 
     def test_counsellor_can_view_assigned_student(self):
         client = Client()
