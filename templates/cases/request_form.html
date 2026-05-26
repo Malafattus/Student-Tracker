@@ -24,7 +24,12 @@
                     <button class="btn btn-outline-success" type="submit" name="approve_request" value="1">Approve request</button>
                     <button class="btn btn-outline-danger" type="submit" name="decline_request" value="1">Decline request</button>
                 {% endif %}
-                <button class="btn btn-outline-secondary" type="submit" name="mark_completed" value="1">Mark completed</button>
+                {% if object.status != 'closed' %}
+                    <button class="btn btn-outline-secondary" type="submit" name="mark_completed" value="1">Mark completed</button>
+                    <button class="btn btn-outline-dark" type="submit" name="close_request" value="1">Move to history</button>
+                {% else %}
+                    <button class="btn btn-outline-secondary" type="submit" name="reopen_request" value="1">Return to active queue</button>
+                {% endif %}
                 <a class="btn btn-outline-secondary" href="{% url 'request_list' %}">Cancel</a>
             </div>
         </form>
@@ -54,6 +59,18 @@
         </div>
     </div>
     <div class="col-lg-6">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Request status</h2></div>
+            <div class="card-body">
+                <p><strong>Current status:</strong> {{ object.get_status_display }}</p>
+                {% if object.closed_at %}
+                    <p><strong>Moved to history:</strong> {{ object.closed_at|date:"M j, Y g:i A" }}</p>
+                    <p class="mb-0"><strong>Closed by:</strong> {{ object.closed_by.get_full_name|default:object.closed_by.username|default:"-" }}</p>
+                {% else %}
+                    <p class="text-muted mb-0">Keep this in the active queue while staff are still working on it. Move it to history when it no longer needs day-to-day attention.</p>
+                {% endif %}
+            </div>
+        </div>
         <div class="card shadow-sm h-100">
             <div class="card-header bg-white"><h2 class="h5 mb-0">Send response</h2></div>
             <div class="card-body">

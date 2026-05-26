@@ -35,6 +35,11 @@
                     <div class="mt-4 d-flex gap-2 flex-wrap">
                         <button class="btn btn-primary" type="submit">Save changes</button>
                         <button class="btn btn-outline-primary" type="submit" name="send_report" value="1">Save and queue email</button>
+                        {% if not object.is_closed %}
+                            <button class="btn btn-outline-dark" type="submit" name="close_report" value="1">Move to history</button>
+                        {% else %}
+                            <button class="btn btn-outline-secondary" type="submit" name="reopen_report" value="1">Return to active workspace</button>
+                        {% endif %}
                     </div>
                 </form>
             </div>
@@ -46,7 +51,9 @@
             <div class="card-body">
                 <p><strong>Recipient:</strong> {{ object.recipient_email|default:"Not set" }}</p>
                 <p><strong>Status:</strong>
-                    {% if object.sent_at %}
+                    {% if object.is_closed %}
+                        <span class="badge text-bg-dark">Closed</span>
+                    {% elif object.sent_at %}
                         <span class="badge text-bg-success">Sent</span>
                     {% elif object.send_requested_at %}
                         <span class="badge text-bg-warning">Queued</span>
@@ -56,6 +63,8 @@
                 </p>
                 {% if object.send_requested_at %}<p><strong>Queued:</strong> {{ object.send_requested_at|date:"M j, Y g:i A" }}</p>{% endif %}
                 {% if object.sent_at %}<p><strong>Sent:</strong> {{ object.sent_at|date:"M j, Y g:i A" }}</p>{% endif %}
+                {% if object.closed_at %}<p><strong>Moved to history:</strong> {{ object.closed_at|date:"M j, Y g:i A" }}</p>{% endif %}
+                {% if object.closed_by %}<p><strong>Closed by:</strong> {{ object.closed_by.get_full_name|default:object.closed_by.username }}</p>{% endif %}
                 {% if object.send_error %}<p class="text-danger mb-0"><strong>Last error:</strong> {{ object.send_error }}</p>{% endif %}
             </div>
         </div>

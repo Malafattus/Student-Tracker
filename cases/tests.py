@@ -87,6 +87,32 @@ class CaseTrackerSmokeTests(TestCase):
         request_item.refresh_from_db()
         self.assertEqual(request_item.status, StudentRequest.STATUS_APPROVED)
 
+    def test_counsellor_can_close_and_reopen_request(self):
+        request_item = StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_TRANSCRIPT,
+            title="Archive this request",
+            details="This should move into history.",
+            status=StudentRequest.STATUS_COMPLETED,
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        close_response = client.post(reverse("request_list"), {"request_id": request_item.pk, "action": "close"})
+        self.assertRedirects(close_response, reverse("request_list"))
+        request_item.refresh_from_db()
+        self.assertEqual(request_item.status, StudentRequest.STATUS_CLOSED)
+        self.assertIsNotNone(request_item.closed_at)
+
+        reopen_response = client.post(reverse("request_list"), {"request_id": request_item.pk, "action": "reopen"})
+        self.assertRedirects(reopen_response, reverse("request_list"))
+        request_item.refresh_from_db()
+        self.assertEqual(request_item.status, StudentRequest.STATUS_COMPLETED)
+        self.assertIsNone(request_item.closed_at)
+
     def test_login_with_email_identifier(self):
         self.admin_user.email = "admin@example.com"
         self.admin_user.save()
@@ -187,3 +213,25 @@ class CaseTrackerSmokeTests(TestCase):
         detail_response = client.get(reverse("prepared_report_update", args=[report.pk]))
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "May family update")
+
+    def test_counsellor_can_close_and_reopen_report(self):
+        report = PreparedReport.objects.create(
+            student=self.student,
+            prepared_by=self.counsellor,
+            audience=PreparedReport.AUDIENCE_PARENT,
+            title="Close me",
+            recipient_email="parent@example.com",
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        close_response = client.post(reverse("prepared_report_update", args=[report.pk]), {"close_report": "1"})
+        self.assertRedirects(close_response, reverse("prepared_report_update", args=[report.pk]))
+        report.refresh_from_db()
+        self.assertTrue(report.is_closed)
+        self.assertIsNotNone(report.closed_at)
+
+        reopen_response = client.post(reverse("prepared_report_update", args=[report.pk]), {"reopen_report": "1"})
+        self.assertRedirects(reopen_response, reverse("prepared_report_update", args=[report.pk]))
+        report.refresh_from_db()
+        self.assertFalse(report.is_closed)
+        self.assertIsNone(report.closed_at)

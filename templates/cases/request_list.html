@@ -13,20 +13,34 @@
     <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">In Review</div><div class="h3 mb-0">{{ request_status_summary.in_review }}</div></div></div></div>
     <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Approved</div><div class="h3 mb-0">{{ request_status_summary.approved }}</div></div></div></div>
     <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Completed</div><div class="h3 mb-0">{{ request_status_summary.completed }}</div></div></div></div>
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Active queue</div><div class="h3 mb-0">{{ active_request_count }}</div></div></div></div>
+    <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Closed history</div><div class="h3 mb-0">{{ closed_request_count }}</div></div></div></div>
 </div>
 <div class="card shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3">
             <div class="col-md-3"><label class="form-label">Status</label><select class="form-select" name="status"><option value="">All</option>{% for value, label in status_choices %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
             <div class="col-md-3"><label class="form-label">Type</label><select class="form-select" name="request_type"><option value="">All</option>{% for value, label in type_choices %}<option value="{{ value }}" {% if request.GET.request_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+            <div class="col-md-3"><label class="form-label">Section</label><select class="form-select" name="scope"><option value="active" {% if current_scope == 'active' %}selected{% endif %}>Active queue</option><option value="history" {% if current_scope == 'history' %}selected{% endif %}>Closed history</option></select></div>
             <div class="col-md-3 d-flex align-items-end gap-2"><button class="btn btn-primary" type="submit">Apply</button><a class="btn btn-outline-secondary" href="{% url 'request_list' %}">Reset</a></div>
         </form>
     </div>
 </div>
 <div class="card shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3 flex-wrap">
+        <div>
+            <h2 class="h5 mb-1">{% if current_scope == "history" %}Closed request history{% else %}Active request queue{% endif %}</h2>
+            <p class="text-muted small mb-0">{% if current_scope == "history" %}Finished or archived requests stay here for reference without crowding the working queue.{% else %}Use this queue for requests that still need review, action, or follow-up.{% endif %}</p>
+        </div>
+        {% if current_scope == "history" %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'request_list' %}">View active queue</a>
+        {% else %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'request_list' %}?scope=history">View closed history</a>
+        {% endif %}
+    </div>
     <div class="table-responsive">
         <table class="table align-middle mb-0">
-            <thead><tr><th>Request</th><th>Student</th><th>Submitted by</th><th>Status</th><th>Files</th><th>Email</th><th>Preferred date</th><th></th></tr></thead>
+            <thead><tr><th>Request</th><th>Student</th><th>Submitted by</th><th>Status</th><th>Files</th><th>Email</th><th>{% if current_scope == 'history' %}Closed{% else %}Preferred date{% endif %}</th><th></th></tr></thead>
             <tbody>
                 {% for item in requests %}
                     <tr>
@@ -54,11 +68,18 @@
                                 <span class="text-muted small">None</span>
                             {% endif %}
                         </td>
-                        <td>{{ item.preferred_date|default:"-" }}</td>
+                        <td>
+                            {% if current_scope == "history" %}
+                                {{ item.closed_at|date:"M j, Y g:i A"|default:"-" }}
+                                {% if item.closed_by %}<div class="small text-muted">by {{ item.closed_by.get_full_name|default:item.closed_by.username }}</div>{% endif %}
+                            {% else %}
+                                {{ item.preferred_date|default:"-" }}
+                            {% endif %}
+                        </td>
                         <td class="text-end">
                             <div class="d-flex justify-content-end gap-1 flex-wrap">
                                 <a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Open</a>
-                                {% if item.request_type == 'counselling' and item.status != 'approved' and item.status != 'declined' and item.status != 'completed' %}
+                                {% if current_scope != 'history' and item.request_type == 'counselling' and item.status != 'approved' and item.status != 'declined' and item.status != 'completed' %}
                                     <form method="post">
                                         {% csrf_token %}
                                         <input type="hidden" name="request_id" value="{{ item.pk }}">
@@ -72,7 +93,7 @@
                                         <button class="btn btn-sm btn-outline-danger" type="submit">Decline</button>
                                     </form>
                                 {% endif %}
-                                {% if item.status != 'completed' %}
+                                {% if current_scope != 'history' and item.status != 'completed' %}
                                     <form method="post">
                                         {% csrf_token %}
                                         <input type="hidden" name="request_id" value="{{ item.pk }}">
@@ -80,8 +101,23 @@
                                         <button class="btn btn-sm btn-outline-secondary" type="submit">Complete</button>
                                     </form>
                                 {% endif %}
+                                {% if current_scope == 'history' %}
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="request_id" value="{{ item.pk }}">
+                                        <input type="hidden" name="action" value="reopen">
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Reopen</button>
+                                    </form>
+                                {% else %}
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="request_id" value="{{ item.pk }}">
+                                        <input type="hidden" name="action" value="close">
+                                        <button class="btn btn-sm btn-outline-dark" type="submit">Close</button>
+                                    </form>
+                                {% endif %}
                             </div>
-                            {% if item.request_type == 'counselling' %}
+                            {% if current_scope != 'history' and item.request_type == 'counselling' %}
                                 <div class="mt-1">
                                     <a class="btn btn-sm btn-primary" href="{% url 'session_create' %}?request={{ item.pk }}">Book slot</a>
                                 </div>
@@ -89,7 +125,7 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="8" class="text-center text-muted py-5">No requests found.</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-5">{% if current_scope == "history" %}No closed requests yet.{% else %}No requests found in the active queue.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

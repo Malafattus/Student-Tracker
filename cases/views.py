@@ -136,6 +136,60 @@ def save_request_attachments(request_item, uploaded_files, uploaded_by=None):
         )
 
 
+def request_queryset_for_user(user):
+    queryset = StudentRequest.objects.select_related("student", "assigned_to", "closed_by").prefetch_related(
+        "attachments", "responses"
+    )
+    if is_student(user):
+        student = current_student_for_user(user)
+        queryset = queryset.filter(student=student)
+    return queryset
+
+
+def apply_request_filters(queryset, query_dict):
+    if query_dict.get("status"):
+        queryset = queryset.filter(status=query_dict["status"])
+    if query_dict.get("request_type"):
+        queryset = queryset.filter(request_type=query_dict["request_type"])
+    return queryset
+
+
+def close_request_item(request_item, user):
+    if request_item.status != StudentRequest.STATUS_CLOSED:
+        request_item.status_before_close = request_item.status
+    request_item.status = StudentRequest.STATUS_CLOSED
+    request_item.closed_by = user
+    request_item.closed_at = timezone.now()
+    request_item.save(update_fields=["status", "status_before_close", "closed_by", "closed_at", "updated_at"])
+
+
+def reopen_request_item(request_item):
+    request_item.status = request_item.status_before_close or StudentRequest.STATUS_IN_REVIEW
+    request_item.status_before_close = ""
+    request_item.closed_by = None
+    request_item.closed_at = None
+    request_item.save(update_fields=["status", "status_before_close", "closed_by", "closed_at", "updated_at"])
+
+
+def report_queryset_for_user(user):
+    students = student_queryset_for_user(user)
+    return PreparedReport.objects.select_related("student", "term", "prepared_by", "closed_by").filter(student__in=students)
+
+
+def close_report_item(report, user):
+    report.is_closed = True
+    report.closed_by = user
+    report.closed_at = timezone.now()
+    report.save(update_fields=["is_closed", "closed_by", "closed_at", "updated_at"])
+
+
+def reopen_report_item(report):
+    report.is_closed = False
+    report.closed_by = None
+    report.closed_at = None
+    report.save(update_fields=["is_closed", "closed_by", "closed_at", "updated_at"])
+
+
 def month_bounds(year, month):
     if month == 12:
         return date(year, month, 1), date(year + 1, 1, 1)
@@ -364,6 +418,10 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        active_requests = self.object.requests.exclude(status=StudentRequest.STATUS_CLOSED)
+        closed_requests = self.object.requests.filter(status=StudentRequest.STATUS_CLOSED)
+        active_reports = self.object.prepared_reports.filter(is_closed=False)
+        closed_reports = self.object.prepared_reports.filter(is_closed=True)
         context["active_tab"] = self.request.GET.get("tab", "overview")
         context["note_form"] = StudentNoteForm()
         context["task_form"] = FollowUpTaskForm()
@@ -396,6 +454,10 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
                 "counselling_update": f"Counselling status: {self.object.get_counselling_status_display()}",
             },
         )
+        context["active_requests"] = active_requests
+        context["closed_requests"] = closed_requests
+        context["active_reports"] = active_reports
+        context["closed_reports"] = closed_reports
         return context
 
 
@@ -574,15 +636,12 @@ class StudentRequestListView(LoginRequiredMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        queryset = StudentRequest.objects.select_related("student", "assigned_to")
-        if is_student(self.request.user):
-            student = current_student_for_user(self.request.user)
-            queryset = queryset.filter(student=student)
-        if self.request.GET.get("status"):
-            queryset = queryset.filter(status=self.request.GET["status"])
-        if self.request.GET.get("request_type"):
-            queryset = queryset.filter(request_type=self.request.GET["request_type"])
-        return queryset.order_by("status", "-created_at")
+        self.current_scope = self.request.GET.get("scope", "active")
+        queryset = apply_request_filters(request_queryset_for_user(self.request.user), self.request.GET)
+        self.filtered_queryset = queryset
+        if self.current_scope == "history":
+            return queryset.filter(status=StudentRequest.STATUS_CLOSED).order_by("-closed_at", "-updated_at")
+        return queryset.exclude(status=StudentRequest.STATUS_CLOSED).order_by("status", "-created_at")
 
     def post(self, request, *args, **kwargs):
         if not (is_admin(request.user) or is_counsellor(request.user)):
@@ -605,17 +664,30 @@ class StudentRequestListView(LoginRequiredMixin, ListView):
             request_item.save(update_fields=["status", "updated_at"])
             log_audit(request.user, "updated", request_item, {"section": "request_completed_quick"})
             messages.success(request, "Request marked completed.")
+        elif action == "close":
+            close_request_item(request_item, request.user)
+            log_audit(request.user, "updated", request_item, {"section": "request_closed_quick"})
+            messages.success(request, "Request moved to history.")
+        elif action == "reopen":
+            reopen_request_item(request_item)
+            log_audit(request.user, "updated", request_item, {"section": "request_reopened_quick"})
+            messages.success(request, "Request returned to the active queue.")
         return redirect("request_list")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        filtered_queryset = getattr(self, "filtered_queryset", apply_request_filters(request_queryset_for_user(self.request.user), self.request.GET))
         context["status_choices"] = StudentRequest.STATUS_CHOICES
         context["type_choices"] = StudentRequest.REQUEST_TYPE_CHOICES
+        context["current_scope"] = getattr(self, "current_scope", "active")
+        context["active_request_count"] = filtered_queryset.exclude(status=StudentRequest.STATUS_CLOSED).count()
+        context["closed_request_count"] = filtered_queryset.filter(status=StudentRequest.STATUS_CLOSED).count()
         context["request_status_summary"] = {
-            "new": StudentRequest.objects.filter(status=StudentRequest.STATUS_NEW).count(),
-            "in_review": StudentRequest.objects.filter(status=StudentRequest.STATUS_IN_REVIEW).count(),
-            "approved": StudentRequest.objects.filter(status=StudentRequest.STATUS_APPROVED).count(),
-            "completed": StudentRequest.objects.filter(status=StudentRequest.STATUS_COMPLETED).count(),
+            "new": filtered_queryset.filter(status=StudentRequest.STATUS_NEW).count(),
+            "in_review": filtered_queryset.filter(status=StudentRequest.STATUS_IN_REVIEW).count(),
+            "approved": filtered_queryset.filter(status=StudentRequest.STATUS_APPROVED).count(),
+            "completed": filtered_queryset.filter(status=StudentRequest.STATUS_COMPLETED).count(),
+            "closed": filtered_queryset.filter(status=StudentRequest.STATUS_CLOSED).count(),
         }
         return context
 
@@ -668,6 +740,16 @@ class StudentRequestUpdateView(LoginRequiredMixin, UpdateView):
             log_audit(request.user, "updated", self.object, {"section": "request_completed"})
             messages.success(request, "Request marked completed.")
             return redirect("request_update", pk=self.object.pk)
+        if "close_request" in request.POST:
+            close_request_item(self.object, request.user)
+            log_audit(request.user, "updated", self.object, {"section": "request_closed"})
+            messages.success(request, "Request moved to history.")
+            return redirect("request_update", pk=self.object.pk)
+        if "reopen_request" in request.POST:
+            reopen_request_item(self.object)
+            log_audit(request.user, "updated", self.object, {"section": "request_reopened"})
+            messages.success(request, "Request returned to the active queue.")
+            return redirect("request_update", pk=self.object.pk)
         return super().post(request, *args, **kwargs)
 
     def handle_response(self, request):
@@ -678,7 +760,7 @@ class StudentRequestUpdateView(LoginRequiredMixin, UpdateView):
             response_item.sent_by = request.user
             response_item.send_requested_at = timezone.now()
             response_item.save()
-            if response_item.mark_complete and self.object.status != StudentRequest.STATUS_COMPLETED:
+            if response_item.mark_complete and self.object.status not in [StudentRequest.STATUS_COMPLETED, StudentRequest.STATUS_CLOSED]:
                 self.object.status = StudentRequest.STATUS_COMPLETED
                 self.object.save(update_fields=["status", "updated_at"])
             log_audit(request.user, "created", response_item, {"section": "request_response"})
@@ -702,6 +784,15 @@ class StudentRequestUpdateView(LoginRequiredMixin, UpdateView):
         return self.render_to_response(self.get_context_data(task_form=form))
 
     def form_valid(self, form):
+        if form.instance.status == StudentRequest.STATUS_CLOSED:
+            if self.object.status != StudentRequest.STATUS_CLOSED:
+                form.instance.status_before_close = self.object.status
+            form.instance.closed_at = self.object.closed_at or timezone.now()
+            form.instance.closed_by = self.object.closed_by or self.request.user
+        elif self.object.status == StudentRequest.STATUS_CLOSED:
+            form.instance.status_before_close = ""
+            form.instance.closed_at = None
+            form.instance.closed_by = None
         response = super().form_valid(form)
         log_audit(self.request.user, "updated", self.object, {"section": "request"})
         messages.success(self.request, "Request updated.")
@@ -950,6 +1041,17 @@ class ReportsView(LoginRequiredMixin, TemplateView):
         if not (is_admin(request.user) or is_counsellor(request.user)):
             messages.error(request, "You do not have permission to prepare reports.")
             return redirect("reports")
+        if request.POST.get("report_action"):
+            report = get_object_or_404(report_queryset_for_user(request.user), pk=request.POST.get("report_id"))
+            if request.POST["report_action"] == "close":
+                close_report_item(report, request.user)
+                log_audit(request.user, "updated", report, {"section": "prepared_report_closed"})
+                messages.success(request, "Report moved to history.")
+            elif request.POST["report_action"] == "reopen":
+                reopen_report_item(report)
+                log_audit(request.user, "updated", report, {"section": "prepared_report_reopened"})
+                messages.success(request, "Report returned to the active workspace.")
+            return redirect("reports")
         form = PreparedReportForm(request.POST, request.FILES)
         if form.is_valid():
             report = form.save(commit=False)
@@ -973,6 +1075,8 @@ class ReportsView(LoginRequiredMixin, TemplateView):
         week_ago = today - timedelta(days=7)
         students = student_queryset_for_user(self.request.user)
         tasks = FollowUpTask.objects.filter(student__in=students)
+        self.current_scope = self.request.GET.get("scope", "active")
+        reports_queryset = report_queryset_for_user(self.request.user)
 
         context["weekly_summary"] = {
             "new_students": students.filter(created_at__date__gte=week_ago).count(),
@@ -989,7 +1093,13 @@ class ReportsView(LoginRequiredMixin, TemplateView):
             due_date__lt=today, status__in=[FollowUpTask.STATUS_OPEN, FollowUpTask.STATUS_IN_PROGRESS]
         ).order_by("due_date")[:20]
         context["report_form"] = kwargs.get("report_form") or PreparedReportForm()
-        context["prepared_reports"] = PreparedReport.objects.select_related("student", "term", "prepared_by")[:12]
+        context["current_scope"] = self.current_scope
+        context["active_report_count"] = reports_queryset.filter(is_closed=False).count()
+        context["closed_report_count"] = reports_queryset.filter(is_closed=True).count()
+        if self.current_scope == "history":
+            context["prepared_reports"] = reports_queryset.filter(is_closed=True).order_by("-closed_at", "-updated_at")[:20]
+        else:
+            context["prepared_reports"] = reports_queryset.filter(is_closed=False).order_by("-created_at")[:20]
         return context
 
 
@@ -1085,6 +1195,16 @@ class PreparedReportUpdateView(LoginRequiredMixin, UpdateView):
         self.object = self.get_object()
         if not can_edit_student(request.user, self.object.student):
             messages.error(request, "You do not have permission to update this report.")
+            return redirect("prepared_report_update", pk=self.object.pk)
+        if "close_report" in request.POST:
+            close_report_item(self.object, request.user)
+            log_audit(request.user, "updated", self.object, {"section": "prepared_report_closed"})
+            messages.success(request, "Report moved to history.")
+            return redirect("prepared_report_update", pk=self.object.pk)
+        if "reopen_report" in request.POST:
+            reopen_report_item(self.object)
+            log_audit(request.user, "updated", self.object, {"section": "prepared_report_reopened"})
+            messages.success(request, "Report returned to the active workspace.")
             return redirect("prepared_report_update", pk=self.object.pk)
         return super().post(request, *args, **kwargs)
 

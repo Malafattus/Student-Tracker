@@ -126,11 +126,11 @@
             {% endif %}
         </div>
         <div class="col-lg-7">
-            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Request history</h2></div><div class="table-responsive">
+            <div class="card shadow-sm mb-4"><div class="card-header bg-white"><h2 class="h5 mb-0">Active requests</h2></div><div class="table-responsive">
                 <table class="table mb-0">
                     <thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Files</th><th></th></tr></thead>
                     <tbody>
-                        {% for item in student.requests.all %}
+                        {% for item in active_requests %}
                             <tr>
                                 <td>{{ item.get_request_type_display }}</td>
                                 <td>{{ item.title }}</td>
@@ -139,7 +139,25 @@
                                 <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Edit</a></td>
                             </tr>
                         {% empty %}
-                            <tr><td colspan="5" class="text-center text-muted py-4">No requests yet.</td></tr>
+                            <tr><td colspan="5" class="text-center text-muted py-4">No active requests.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div></div>
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Closed request history</h2></div><div class="table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>Type</th><th>Title</th><th>Closed</th><th>Files</th><th></th></tr></thead>
+                    <tbody>
+                        {% for item in closed_requests %}
+                            <tr>
+                                <td>{{ item.get_request_type_display }}</td>
+                                <td>{{ item.title }}</td>
+                                <td>{{ item.closed_at|date:"M j, Y"|default:"-" }}</td>
+                                <td>{{ item.attachments.count }}</td>
+                                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'request_update' item.pk %}">Open</a></td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="5" class="text-center text-muted py-4">No closed requests yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -312,8 +330,8 @@
             {% endif %}
         </div>
         <div class="col-lg-7">
-            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Prepared reports</h2></div><div class="list-group list-group-flush">
-                {% for report in student.prepared_reports.all %}
+            <div class="card shadow-sm mb-4"><div class="card-header bg-white"><h2 class="h5 mb-0">Active reports</h2></div><div class="list-group list-group-flush">
+                {% for report in active_reports %}
                     <div class="list-group-item">
                         <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
                             <div>
@@ -338,7 +356,26 @@
                         {% endif %}
                     </div>
                 {% empty %}
-                    <div class="list-group-item text-muted">No prepared reports yet.</div>
+                    <div class="list-group-item text-muted">No active reports yet.</div>
+                {% endfor %}
+            </div></div>
+            <div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Closed report history</h2></div><div class="list-group list-group-flush">
+                {% for report in closed_reports %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                            <div>
+                                <div class="fw-semibold">{{ report.title }}</div>
+                                <div class="small text-muted mb-2">
+                                    {{ report.get_audience_display }}{% if report.term %} | {{ report.term }}{% endif %}
+                                    {% if report.closed_at %} | Closed {{ report.closed_at|date:"M j, Y g:i A" }}{% endif %}
+                                </div>
+                            </div>
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_update' report.pk %}">Open report</a>
+                        </div>
+                        <div>{{ report.summary|default:"No summary entered." }}</div>
+                    </div>
+                {% empty %}
+                    <div class="list-group-item text-muted">No closed reports yet.</div>
                 {% endfor %}
             </div></div>
         </div>

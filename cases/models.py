@@ -342,6 +342,15 @@ class StudentRequest(TimeStampedModel):
     preferred_date = models.DateField(blank=True, null=True)
     preferred_time = models.CharField(max_length=100, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
+    status_before_close = models.CharField(max_length=20, blank=True)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="closed_student_requests",
+    )
+    closed_at = models.DateTimeField(blank=True, null=True)
     internal_notes = models.TextField(blank=True)
     confirmation_sent_at = models.DateTimeField(blank=True, null=True)
 
@@ -498,6 +507,15 @@ class PreparedReport(TimeStampedModel):
     send_requested_at = models.DateTimeField(blank=True, null=True)
     sent_at = models.DateTimeField(blank=True, null=True)
     send_error = models.TextField(blank=True)
+    is_closed = models.BooleanField(default=False)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="closed_prepared_reports",
+    )
+    closed_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ["-created_at"]

@@ -99,7 +99,22 @@
     </div>
     <div class="col-lg-6">
         <div class="card shadow-sm h-100">
-            <div class="card-header bg-white"><h2 class="h5 mb-0">Prepared reports</h2></div>
+            <div class="card-header bg-white d-flex justify-content-between align-items-center gap-3 flex-wrap">
+                <div>
+                    <h2 class="h5 mb-1">{% if current_scope == "history" %}Closed report history{% else %}Prepared reports{% endif %}</h2>
+                    <p class="text-muted small mb-0">{% if current_scope == "history" %}Archived reports remain available here for future reference.{% else %}Use the active workspace for reports that still need editing, sending, or review.{% endif %}</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a class="btn btn-sm {% if current_scope == 'active' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{% url 'reports' %}">Active</a>
+                    <a class="btn btn-sm {% if current_scope == 'history' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'reports' %}?scope=history">History</a>
+                </div>
+            </div>
+            <div class="card-body border-bottom bg-light-subtle">
+                <div class="row g-3">
+                    <div class="col-sm-6"><div class="fw-semibold">{{ active_report_count }}</div><div class="small text-muted">Active reports</div></div>
+                    <div class="col-sm-6"><div class="fw-semibold">{{ closed_report_count }}</div><div class="small text-muted">Closed reports</div></div>
+                </div>
+            </div>
             <div class="list-group list-group-flush">
                 {% for item in prepared_reports %}
                     <div class="list-group-item">
@@ -116,9 +131,25 @@
                                     {% else %}
                                         | Saved draft
                                     {% endif %}
+                                    {% if item.closed_at %}
+                                        | Closed {{ item.closed_at|date:"M j, Y g:i A" }}
+                                    {% endif %}
                                 </div>
                             </div>
-                            <a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_update' item.pk %}">Open report</a>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_update' item.pk %}">Open report</a>
+                                <form method="post">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="report_id" value="{{ item.pk }}">
+                                    {% if current_scope == 'history' %}
+                                        <input type="hidden" name="report_action" value="reopen">
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Reopen</button>
+                                    {% else %}
+                                        <input type="hidden" name="report_action" value="close">
+                                        <button class="btn btn-sm btn-outline-dark" type="submit">Close</button>
+                                    {% endif %}
+                                </form>
+                            </div>
                         </div>
                         {% if item.send_error %}
                             <div class="small text-danger mt-1">{{ item.send_error }}</div>
@@ -128,7 +159,7 @@
                         {% endif %}
                     </div>
                 {% empty %}
-                    <div class="list-group-item text-muted">No prepared reports yet.</div>
+                    <div class="list-group-item text-muted">{% if current_scope == "history" %}No closed reports yet.{% else %}No active prepared reports yet.{% endif %}</div>
                 {% endfor %}
             </div>
         </div>
