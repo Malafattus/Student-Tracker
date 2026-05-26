@@ -88,6 +88,8 @@ class StudentForm(forms.ModelForm):
             "parent_guardian_email",
             "parent_guardian_phone",
             "academic_status",
+            "case_stage",
+            "next_review_date",
             "attendance_concerns",
             "ossd_credit_progress",
             "graduation_status",
@@ -105,6 +107,7 @@ class StudentForm(forms.ModelForm):
             "is_active",
         ]
         widgets = {
+            "next_review_date": DateInput(),
             "attendance_concerns": forms.Textarea(attrs={"rows": 3}),
             "target_universities": forms.Textarea(attrs={"rows": 3}),
             "internal_summary": forms.Textarea(attrs={"rows": 4}),
@@ -164,6 +167,7 @@ class CommunicationLogForm(forms.ModelForm):
 class StudentFilterForm(forms.Form):
     assigned_counsellor = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
     grade = forms.CharField(required=False)
+    case_stage = forms.ChoiceField(required=False, choices=[("", "All")] + Student.CASE_STAGE_CHOICES)
     risk_level = forms.ChoiceField(required=False, choices=[("", "All")] + Student.RISK_LEVEL_CHOICES)
     payment_status = forms.ChoiceField(required=False, choices=[("", "All")] + Student.PAYMENT_STATUS_CHOICES)
     homestay_status = forms.ChoiceField(required=False, choices=[("", "All")] + Student.HOMESTAY_STATUS_CHOICES)

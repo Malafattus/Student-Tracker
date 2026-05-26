@@ -26,6 +26,48 @@
     <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Homestay issues</div><div class="stat-value">{{ stats.homestay_issues }}</div></div></div></div>
     <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Open requests</div><div class="stat-value">{{ stats.open_requests }}</div></div></div></div>
     <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Upcoming sessions</div><div class="stat-value">{{ stats.upcoming_sessions }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card stat-card"><div class="card-body"><div class="stat-label">Reviews this week</div><div class="stat-value">{{ stats.reviews_this_week }}</div></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="card shadow-sm premium-card">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Workflow</span>
+                <h2 class="section-title mb-1">Case stage snapshot</h2>
+                <p class="section-subtitle mb-0">A quick read on where the current caseload is sitting operationally.</p>
+            </div>
+            <div class="card-body">
+                <div class="mini-stat-grid">
+                    <div class="mini-stat-card"><div class="mini-stat-label">New</div><div class="mini-stat-value">{{ case_stage_summary.new }}</div></div>
+                    <div class="mini-stat-card"><div class="mini-stat-label">Active</div><div class="mini-stat-value">{{ case_stage_summary.active }}</div></div>
+                    <div class="mini-stat-card"><div class="mini-stat-label">Waiting</div><div class="mini-stat-value">{{ case_stage_summary.waiting }}</div></div>
+                    <div class="mini-stat-card"><div class="mini-stat-label">Application</div><div class="mini-stat-value">{{ case_stage_summary.application }}</div></div>
+                    <div class="mini-stat-card"><div class="mini-stat-label">Resolved</div><div class="mini-stat-value">{{ case_stage_summary.resolved }}</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm premium-card h-100">
+            <div class="card-header bg-white border-0 pb-0">
+                <span class="section-kicker">Focus</span>
+                <h2 class="section-title mb-1">This week</h2>
+            </div>
+            <div class="card-body">
+                <div class="status-panel subtle mb-3">
+                    <div class="status-label">Review cadence</div>
+                    <div class="status-value">{{ stats.reviews_this_week }} student review{{ stats.reviews_this_week|pluralize }}</div>
+                    <div class="status-detail">Students with review dates in the next 7 days.</div>
+                </div>
+                <div class="status-panel">
+                    <div class="status-label">Queue pressure</div>
+                    <div class="status-value">{{ stats.open_requests }} open request{{ stats.open_requests|pluralize }}</div>
+                    <div class="status-detail">Combine this with overdue tasks to spot students who need immediate staff attention.</div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="row g-4">
@@ -38,18 +80,19 @@
             </div>
             <div class="table-responsive premium-table">
                 <table class="table table-hover mb-0">
-                    <thead><tr><th>Name</th><th>Grade</th><th>Counsellor</th><th>Risk</th><th>Updated</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Grade</th><th>Case stage</th><th>Counsellor</th><th>Risk</th><th>Updated</th></tr></thead>
                     <tbody>
                         {% for student in recent_students %}
                             <tr>
                                 <td><a href="{{ student.get_absolute_url }}">{{ student.full_name }}</a></td>
                                 <td>{{ student.grade }}</td>
+                                <td>{{ student.get_case_stage_display }}</td>
                                 <td>{{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</td>
                                 <td><span class="badge text-bg-secondary">{{ student.get_overall_risk_level_display }}</span></td>
                                 <td>{{ student.updated_at|date:"M j, Y g:i A" }}</td>
                             </tr>
                         {% empty %}
-                            <tr><td colspan="5" class="text-center text-muted py-4">No students yet.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted py-4">No students yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

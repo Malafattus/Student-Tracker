@@ -295,6 +295,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 status=CounsellingSession.STATUS_SCHEDULED,
                 start_at__date__gte=today,
             ).count(),
+            "reviews_this_week": students.filter(next_review_date__gte=today, next_review_date__lte=today + timedelta(days=7)).count(),
+        }
+        context["case_stage_summary"] = {
+            "new": students.filter(case_stage=Student.STAGE_NEW).count(),
+            "active": students.filter(case_stage=Student.STAGE_ACTIVE).count(),
+            "waiting": students.filter(case_stage__in=[Student.STAGE_WAITING_STUDENT, Student.STAGE_WAITING_PARENT]).count(),
+            "application": students.filter(case_stage=Student.STAGE_APPLICATION).count(),
+            "resolved": students.filter(case_stage=Student.STAGE_RESOLVED).count(),
         }
         context["recent_students"] = students.order_by("-updated_at")[:8]
         context["recent_requests"] = StudentRequest.objects.select_related("student").order_by("-created_at")[:6]
@@ -384,6 +392,8 @@ class StudentListView(LoginRequiredMixin, ListView):
                 queryset = queryset.filter(assigned_counsellor=data["assigned_counsellor"])
             if data.get("grade"):
                 queryset = queryset.filter(grade__icontains=data["grade"])
+            if data.get("case_stage"):
+                queryset = queryset.filter(case_stage=data["case_stage"])
             if data.get("risk_level"):
                 queryset = queryset.filter(overall_risk_level=data["risk_level"])
             if data.get("payment_status"):
@@ -467,6 +477,12 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
         closed_sessions = self.object.sessions.filter(is_closed=True)
         active_reports = self.object.prepared_reports.filter(is_closed=False)
         closed_reports = self.object.prepared_reports.filter(is_closed=True)
+        open_request = active_requests.exclude(
+            status__in=[StudentRequest.STATUS_COMPLETED, StudentRequest.STATUS_DECLINED]
+        ).first()
+        upcoming_session = active_sessions.filter(start_at__gte=timezone.now()).order_by("start_at").first()
+        urgent_tasks = active_tasks.filter(status__in=[FollowUpTask.STATUS_OPEN, FollowUpTask.STATUS_IN_PROGRESS]).order_by("due_date")[:3]
+        missing_documents = self.object.documents.filter(status="missing")
         context["active_tab"] = self.request.GET.get("tab", "overview")
         context["note_form"] = StudentNoteForm()
         context["task_form"] = FollowUpTaskForm()
@@ -507,6 +523,47 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
         context["closed_sessions"] = closed_sessions
         context["active_reports"] = active_reports
         context["closed_reports"] = closed_reports
+        context["open_request"] = open_request
+        context["upcoming_session"] = upcoming_session
+        context["urgent_tasks"] = urgent_tasks
+        context["missing_documents"] = missing_documents
+        context["student_actions"] = [
+            {
+                "title": "Log a request",
+                "body": "Capture a new transcript, counselling, or support request without leaving the student record.",
+                "href": "?tab=requests",
+                "cta": "Open requests",
+            },
+            {
+                "title": "Book the next session",
+                "body": "Move straight into scheduling when a counselling conversation needs a confirmed slot.",
+                "href": f"{reverse('session_create')}?student={self.object.pk}",
+                "cta": "Book session",
+            },
+            {
+                "title": "Prepare a report",
+                "body": "Create a polished parent or agent update using the student information already on file.",
+                "href": "?tab=reports",
+                "cta": "Open reports",
+            },
+        ]
+        context["student_workflow_flags"] = [
+            {
+                "label": "Case stage",
+                "value": self.object.get_case_stage_display(),
+                "detail": f"Next review {self.object.next_review_date:%b %d, %Y}" if self.object.next_review_date else "No review date set yet",
+            },
+            {
+                "label": "Open requests",
+                "value": active_requests.exclude(status__in=[StudentRequest.STATUS_COMPLETED, StudentRequest.STATUS_DECLINED]).count(),
+                "detail": "Still waiting on staff review or follow-up",
+            },
+            {
+                "label": "Missing documents",
+                "value": missing_documents.count(),
+                "detail": "Items still blocking progress",
+            },
+        ]
         return context
 
 

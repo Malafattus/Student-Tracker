@@ -26,6 +26,12 @@ class Student(TimeStampedModel):
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_ACTIVE = "active"
     STATUS_CLOSED = "closed"
+    STAGE_NEW = "new"
+    STAGE_ACTIVE = "active"
+    STAGE_WAITING_STUDENT = "waiting_student"
+    STAGE_WAITING_PARENT = "waiting_parent"
+    STAGE_APPLICATION = "application_in_progress"
+    STAGE_RESOLVED = "resolved"
 
     YES_NO_CHOICES = [
         ("ok", "OK"),
@@ -85,6 +91,14 @@ class Student(TimeStampedModel):
         ("pending", "Pending"),
         ("missing", "Missing"),
     ]
+    CASE_STAGE_CHOICES = [
+        (STAGE_NEW, "New"),
+        (STAGE_ACTIVE, "Active"),
+        (STAGE_WAITING_STUDENT, "Waiting on Student"),
+        (STAGE_WAITING_PARENT, "Waiting on Parent/Agent"),
+        (STAGE_APPLICATION, "Application in Progress"),
+        (STAGE_RESOLVED, "Resolved"),
+    ]
 
     full_name = models.CharField(max_length=255)
     student_id = models.CharField(max_length=50, unique=True)
@@ -119,6 +133,8 @@ class Student(TimeStampedModel):
     )
     overall_risk_level = models.CharField(max_length=20, choices=RISK_LEVEL_CHOICES, default="low")
     internal_summary = models.TextField(blank=True)
+    case_stage = models.CharField(max_length=30, choices=CASE_STAGE_CHOICES, default=STAGE_ACTIVE)
+    next_review_date = models.DateField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:

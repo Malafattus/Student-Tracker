@@ -19,6 +19,7 @@ class CaseTrackerSmokeTests(TestCase):
             grade="12",
             nationality="Canada",
             assigned_counsellor=self.counsellor,
+            case_stage=Student.STAGE_ACTIVE,
         )
 
     def test_admin_can_load_dashboard(self):
@@ -32,6 +33,23 @@ class CaseTrackerSmokeTests(TestCase):
         client.login(username="counsellor", password="pass12345")
         response = client.get(reverse("student_detail", args=[self.student.pk]))
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Case stage and next steps")
+
+    def test_student_list_can_filter_by_case_stage(self):
+        Student.objects.create(
+            full_name="Waiting Student",
+            student_id="S8888",
+            grade="11",
+            nationality="Canada",
+            assigned_counsellor=self.counsellor,
+            case_stage=Student.STAGE_WAITING_STUDENT,
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("student_list"), {"case_stage": Student.STAGE_WAITING_STUDENT})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Waiting Student")
+        self.assertNotContains(response, "Test Student")
 
     def test_public_student_request_creates_record(self):
         response = self.client.post(

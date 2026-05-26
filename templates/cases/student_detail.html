@@ -30,9 +30,87 @@
 </div>
 
 {% if active_tab == 'overview' %}
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm premium-card">
+                <div class="card-header bg-white border-0 pb-0">
+                    <span class="section-kicker">Workflow</span>
+                    <h2 class="section-title mb-1">Case stage and next steps</h2>
+                    <p class="section-subtitle mb-0">A quick view of where this student stands and what staff should move on next.</p>
+                </div>
+                <div class="card-body">
+                    <div class="mini-stat-grid mb-4">
+                        {% for flag in student_workflow_flags %}
+                            <div class="mini-stat-card">
+                                <div class="mini-stat-label">{{ flag.label }}</div>
+                                <div class="mini-stat-value">{{ flag.value }}</div>
+                                <div class="status-detail mt-2">{{ flag.detail }}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="next-step-card mb-3">
+                        <div class="next-step-status">Current stage</div>
+                        <h3>{{ student.get_case_stage_display }}</h3>
+                        <p class="mb-0">{% if student.next_review_date %}Next review is set for {{ student.next_review_date }}.{% else %}No review date has been set yet. Add one when you update the student record to keep the case moving on time.{% endif %}</p>
+                    </div>
+                    <div class="stacked-list">
+                        {% if open_request %}
+                            <div class="stacked-list-item">
+                                <div class="fw-semibold">Open request waiting on staff</div>
+                                <div class="small text-muted mb-2">{{ open_request.get_request_type_display }} | {{ open_request.get_status_display }}</div>
+                                <div>{{ open_request.title }}</div>
+                            </div>
+                        {% endif %}
+                        {% if urgent_tasks %}
+                            <div class="stacked-list-item">
+                                <div class="fw-semibold">Upcoming follow-up</div>
+                                {% for task in urgent_tasks %}
+                                    <div class="small {% if not forloop.last %}mb-2{% endif %}">{{ task.title }}{% if task.due_date %} | due {{ task.due_date }}{% endif %}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        {% if not open_request and not urgent_tasks and not missing_documents and not upcoming_session %}
+                            <div class="empty-state-panel compact">
+                                <div class="empty-state-title">This case is currently calm</div>
+                                <div class="empty-state-copy">There are no active requests, urgent tasks, or missing documents blocking progress right now.</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card shadow-sm premium-card h-100">
+                <div class="card-header bg-white border-0 pb-0">
+                    <span class="section-kicker">Actions</span>
+                    <h2 class="section-title mb-1">Move the case forward</h2>
+                </div>
+                <div class="card-body">
+                    <div class="stacked-list">
+                        {% for action in student_actions %}
+                            <div class="stacked-list-item">
+                                <div class="fw-semibold mb-1">{{ action.title }}</div>
+                                <div class="small text-muted mb-3">{{ action.body }}</div>
+                                <a class="btn btn-sm btn-outline-primary" href="{{ action.href }}">{{ action.cta }}</a>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% if upcoming_session %}
+                        <div class="status-panel mt-4">
+                            <div class="status-label">Next booked session</div>
+                            <div class="status-value">{{ upcoming_session.start_at|date:"M j, Y g:i A" }}</div>
+                            <div class="status-detail">{{ upcoming_session.get_session_type_display }} with {{ upcoming_session.counsellor.get_full_name|default:"Unassigned counsellor" }}</div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="row g-4">
         <div class="col-lg-6"><div class="card shadow-sm"><div class="card-header bg-white"><h2 class="h5 mb-0">Case overview</h2></div><div class="card-body detail-grid">
             <div><strong>Assigned counsellor:</strong> {{ student.assigned_counsellor.get_full_name|default:"Unassigned" }}</div>
+            <div><strong>Case stage:</strong> {{ student.get_case_stage_display }}</div>
+            <div><strong>Next review date:</strong> {{ student.next_review_date|default:"-" }}</div>
             <div><strong>Agency:</strong> {{ student.agency|default:"-" }}</div>
             <div><strong>Preferred language:</strong> {{ student.preferred_language|default:"-" }}</div>
             <div><strong>Target country:</strong> {{ student.target_country|default:"-" }}</div>
