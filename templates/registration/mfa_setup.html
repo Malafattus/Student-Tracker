@@ -21,13 +21,29 @@
                                 <div class="alert alert-{{ message.tags|default:'info' }} py-2">{{ message }}</div>
                             {% endfor %}
                         {% endif %}
-                        <div class="border rounded-3 p-3 bg-light mb-4">
-                            <div class="small text-muted mb-1">Manual setup key</div>
-                            <div class="fw-semibold">{{ mfa_secret }}</div>
-                            <div class="small text-muted mt-3">Account label</div>
-                            <div>{{ current_user_obj.username }}</div>
-                            <div class="small text-muted mt-3">Authenticator link</div>
-                            <div class="small text-break">{{ mfa_uri }}</div>
+                        <div class="row g-4 align-items-start mb-4">
+                            <div class="col-md-5">
+                                <div class="border rounded-3 p-3 bg-light h-100 text-center">
+                                    <div class="small text-muted mb-2">Scan this QR code</div>
+                                    {% if mfa_qr_svg %}
+                                        <img src="{{ mfa_qr_svg }}" alt="Authenticator QR code" class="img-fluid rounded-3 bg-white p-2 border">
+                                        <div class="small text-muted mt-2">Use Google Authenticator, Microsoft Authenticator, or another compatible app.</div>
+                                    {% else %}
+                                        <div class="small text-muted">QR generation is not available in this environment yet. You can still use the manual setup key on the right.</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-7">
+                                <div class="border rounded-3 p-3 bg-light h-100">
+                                    <div class="small text-muted mb-1">Manual setup key</div>
+                                    <div class="fw-semibold">{{ mfa_secret }}</div>
+                                    <div class="small text-muted mt-3">Account label</div>
+                                    <div>{{ current_user_obj.username }}</div>
+                                    <div class="small text-muted mt-3">Advanced setup link</div>
+                                    <div class="small text-break">{{ mfa_uri }}</div>
+                                    <div class="small text-muted mt-2">If your app asks for a manual key, enter only the setup key above, not the full link.</div>
+                                </div>
+                            </div>
                         </div>
                         <form method="post">
                             {% csrf_token %}
