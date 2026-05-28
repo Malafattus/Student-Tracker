@@ -198,7 +198,7 @@
                                                 <div class="small text-muted">{{ report.created_at|date:"M j, Y" }}</div>
                                             </div>
                                             {% if report.attachment %}
-                                                <a class="btn btn-sm btn-outline-primary" href="{{ report.attachment.url }}" target="_blank">Open file</a>
+                                                <a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_attachment' report.pk %}" target="_blank">Open file</a>
                                             {% endif %}
                                         </div>
                                     {% empty %}

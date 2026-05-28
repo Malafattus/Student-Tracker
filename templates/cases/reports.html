@@ -149,7 +149,7 @@
                                 <div class="small text-danger mt-2">{{ item.send_error }}</div>
                             {% endif %}
                             {% if item.attachment %}
-                                <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{{ item.attachment.url }}" target="_blank">Open attached file</a></div>
+                                <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_attachment' item.pk %}" target="_blank">Open attached file</a></div>
                             {% endif %}
                         </div>
                     {% empty %}

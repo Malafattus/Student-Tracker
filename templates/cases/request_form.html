@@ -48,7 +48,7 @@
                                     <div class="fw-semibold">{{ item.original_name }}</div>
                                     <div class="small text-muted">{{ item.created_at|date:"M j, Y g:i A" }}</div>
                                 </div>
-                                <a class="btn btn-sm btn-outline-primary" href="{{ item.file.url }}" target="_blank">Open</a>
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'request_attachment_download' item.pk %}" target="_blank">Open</a>
                             </li>
                         {% endfor %}
                     </ul>
@@ -119,7 +119,7 @@
                                     <div class="small text-danger mb-2">{{ item.send_error }}</div>
                                 {% endif %}
                                 {% if item.attachment %}
-                                    <a class="btn btn-sm btn-outline-primary" href="{{ item.attachment.url }}" target="_blank">Open attached document</a>
+                                    <a class="btn btn-sm btn-outline-primary" href="{% url 'request_response_attachment_download' item.pk %}" target="_blank">Open attached document</a>
                                 {% endif %}
                             </div>
                         {% endfor %}

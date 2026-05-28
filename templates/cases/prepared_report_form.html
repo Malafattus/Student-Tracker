@@ -11,7 +11,7 @@
     <div class="d-flex gap-2">
         <a class="btn btn-outline-secondary" href="{{ student.get_absolute_url }}?tab=reports">Back to student</a>
         {% if object.attachment %}
-            <a class="btn btn-outline-primary" href="{{ object.attachment.url }}" target="_blank">Open attached file</a>
+            <a class="btn btn-outline-primary" href="{% url 'prepared_report_attachment' object.pk %}" target="_blank">Open attached file</a>
         {% endif %}
     </div>
 </div>

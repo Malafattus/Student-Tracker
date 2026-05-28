@@ -583,7 +583,7 @@
                         {% endif %}
                         <div>{{ report.summary|default:"No summary entered." }}</div>
                         {% if report.attachment %}
-                            <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{{ report.attachment.url }}" target="_blank">Open attached report file</a></div>
+                            <div class="mt-2"><a class="btn btn-sm btn-outline-primary" href="{% url 'prepared_report_attachment' report.pk %}" target="_blank">Open attached report file</a></div>
                         {% endif %}
                     </div>
                 {% empty %}
