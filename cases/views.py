@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import views as auth_views
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
@@ -17,7 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views import View
-from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
+from django.views.generic import CreateView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from .audit import log_audit, log_security_event
 from .forms import (
@@ -30,6 +31,8 @@ from .forms import (
     FollowUpTaskForm,
     LoginIDAuthenticationForm,
     RequestTaskForm,
+    RequiredPasswordChangeForm,
+    SecurityPolicyForm,
     SessionChangeRequestForm,
     ParentPortalAccessForm,
     StudentPortalRequestForm,
@@ -42,6 +45,7 @@ from .forms import (
     StudentPortalAccessForm,
     StudentTermRecordForm,
     TermCourseEnrollmentForm,
+    UserSecurityProfileForm,
     UserManagementForm,
 )
 from .models import (
@@ -56,6 +60,7 @@ from .models import (
     FollowUpTask,
     ParentPortalAccess,
     PreparedReport,
+    SecurityPolicy,
     SessionChangeRequest,
     Student,
     StudentPortalAccess,
@@ -64,6 +69,7 @@ from .models import (
     StudentRequestResponse,
     StudentTermRecord,
     TermCourseEnrollment,
+    UserSecurityProfile,
 )
 from .notifications import (
     send_prepared_report,
@@ -124,7 +130,52 @@ class RoleAwareLoginView(auth_views.LoginView):
     authentication_form = LoginIDAuthenticationForm
     template_name = "registration/login.html"
 
+    def login_identifier(self):
+        return (self.request.POST.get("username") or "").strip()
+
+    def lockout_keys(self):
+        identifier = self.login_identifier() or "unknown"
+        ip_address = client_ip_address(self.request)
+        return [
+            throttle_cache_key("login-ip", ip_address),
+            throttle_cache_key("login-id", identifier),
+        ]
+
+    def lockout_active(self):
+        for key in self.lockout_keys():
+            if (cache.get(key) or 0) >= settings.LOGIN_FAILURE_LIMIT:
+                return True
+        return False
+
+    def increment_login_failures(self):
+        ttl = settings.LOGIN_LOCKOUT_SECONDS
+        for key in self.lockout_keys():
+            current = cache.get(key) or 0
+            cache.set(key, current + 1, ttl)
+
+    def clear_login_failures(self):
+        for key in self.lockout_keys():
+            cache.delete(key)
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method.lower() == "post" and self.lockout_active():
+            log_security_event(
+                "login_locked",
+                "Blocked login attempt",
+                {
+                    "section": "login_lockout",
+                    "ip_address": client_ip_address(request),
+                    "login_identifier": self.login_identifier(),
+                },
+            )
+            messages.error(request, "Too many sign-in attempts were made. Please wait a little and try again.")
+            return self.get(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_success_url(self):
+        security_profile = getattr(self.request.user, "security_profile", None)
+        if security_profile and security_profile.must_reset_password:
+            return reverse("password_change_required")
         student = current_student_for_user(self.request.user)
         if student:
             return reverse("portal_dashboard")
@@ -135,6 +186,38 @@ class RoleAwareLoginView(auth_views.LoginView):
         if is_student(self.request.user):
             return reverse("portal_unavailable")
         return super().get_success_url()
+
+    def form_valid(self, form):
+        security_profile = getattr(form.get_user(), "security_profile", None)
+        if security_profile and security_profile.manually_locked:
+            log_security_event(
+                "login_blocked",
+                "Blocked login for locked account",
+                {
+                    "section": "manual_account_lock",
+                    "login_identifier": self.login_identifier(),
+                    "ip_address": client_ip_address(self.request),
+                    "user_id": form.get_user().pk,
+                },
+                actor=form.get_user(),
+            )
+            messages.error(self.request, "This account has been locked. Please contact an administrator.")
+            return self.get(self.request)
+        self.clear_login_failures()
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        self.increment_login_failures()
+        log_security_event(
+            "login_failed",
+            "Failed login attempt",
+            {
+                "section": "login_failure",
+                "ip_address": client_ip_address(self.request),
+                "login_identifier": self.login_identifier(),
+            },
+        )
+        return super().form_invalid(form)
 
 
 def student_queryset_for_user(user):
@@ -2206,6 +2289,105 @@ class UserUpdateView(LoginRequiredMixin, UpdateView):
         log_audit(self.request.user, "updated", self.object, {"section": "user"})
         messages.success(self.request, "User updated successfully.")
         return response
+
+
+class SecurityCenterView(LoginRequiredMixin, TemplateView):
+    template_name = "cases/security_center.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        require_admin(request.user)
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        policy = SecurityPolicy.get_solo()
+        action = request.POST.get("action")
+
+        if action == "save_policy":
+            policy_form = SecurityPolicyForm(request.POST, instance=policy)
+            if policy_form.is_valid():
+                policy_form.save()
+                log_audit(request.user, "updated", policy, {"section": "security_policy"})
+                messages.success(request, "Security policy updated.")
+                return redirect("security_center")
+            return self.render_to_response(self.get_context_data(policy_form=policy_form))
+
+        user = get_object_or_404(User.objects.all(), pk=request.POST.get("user_id"))
+        security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
+        profile_form = UserSecurityProfileForm(request.POST, instance=security_profile)
+
+        if action in {"lock_user", "unlock_user", "force_reset", "clear_reset", "save_note"}:
+            if action == "lock_user":
+                security_profile.manually_locked = True
+                message = "Account locked."
+            elif action == "unlock_user":
+                security_profile.manually_locked = False
+                message = "Account unlocked."
+            elif action == "force_reset":
+                security_profile.must_reset_password = True
+                message = "Password reset required on next sign-in."
+            elif action == "clear_reset":
+                security_profile.must_reset_password = False
+                message = "Forced password reset cleared."
+            else:
+                if profile_form.is_valid():
+                    security_profile.security_note = profile_form.cleaned_data["security_note"]
+                    message = "Security note updated."
+                else:
+                    return self.render_to_response(self.get_context_data(policy_form=SecurityPolicyForm(instance=policy)))
+            security_profile.save()
+            log_audit(
+                request.user,
+                "updated",
+                user,
+                {"section": "security_center", "security_action": action},
+            )
+            messages.success(request, message)
+            return redirect("security_center")
+
+        messages.error(request, "That security action could not be completed.")
+        return redirect("security_center")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        policy = SecurityPolicy.get_solo()
+        users = list(
+            User.objects.select_related("security_profile", "counsellor_profile")
+            .prefetch_related("groups")
+            .order_by("username")
+        )
+        for user in users:
+            UserSecurityProfile.objects.get_or_create(user=user)
+        context["policy_form"] = kwargs.get("policy_form") or SecurityPolicyForm(instance=policy)
+        context["security_users"] = users
+        context["policy"] = policy
+        return context
+
+
+class RequiredPasswordChangeView(LoginRequiredMixin, FormView):
+    template_name = "registration/password_change_required.html"
+    form_class = RequiredPasswordChangeForm
+    success_url = reverse_lazy("dashboard")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def dispatch(self, request, *args, **kwargs):
+        if not getattr(request.user, "is_authenticated", False):
+            return redirect(settings.LOGIN_URL)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        form.save()
+        security_profile, _ = UserSecurityProfile.objects.get_or_create(user=self.request.user)
+        security_profile.must_reset_password = False
+        security_profile.password_changed_at = timezone.now()
+        security_profile.save()
+        update_session_auth_hash(self.request, self.request.user)
+        log_audit(self.request.user, "updated", self.request.user, {"section": "required_password_change"})
+        messages.success(self.request, "Password updated successfully.")
+        return super().form_valid(form)
 
 
 class AdminToolsView(LoginRequiredMixin, TemplateView):

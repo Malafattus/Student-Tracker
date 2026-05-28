@@ -26,6 +26,8 @@ from .views import (
     ReportsView,
     RequestAttachmentDownloadView,
     RequestResponseAttachmentDownloadView,
+    RequiredPasswordChangeView,
+    SecurityCenterView,
     SessionCreateView,
     SessionListView,
     SessionRescheduleRequestView,
@@ -89,7 +91,9 @@ urlpatterns = [
     path("reports/", ReportsView.as_view(), name="reports"),
     path("users/", UserManagementView.as_view(), name="user_management"),
     path("users/<int:pk>/edit/", UserUpdateView.as_view(), name="user_update"),
+    path("security-center/", SecurityCenterView.as_view(), name="security_center"),
     path("admin-tools/", AdminToolsView.as_view(), name="admin_tools"),
     path("admin-tools/download-db/", DatabaseBackupDownloadView.as_view(), name="download_db_backup"),
     path("admin-tools/download-csv/", CsvExportDownloadView.as_view(), name="download_csv_export"),
+    path("accounts/password-change-required/", RequiredPasswordChangeView.as_view(), name="password_change_required"),
 ]
