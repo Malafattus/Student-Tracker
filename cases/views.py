@@ -103,6 +103,7 @@ from .permissions import (
     is_student,
     require_admin,
 )
+from .security import build_security_review_rows, mfa_required_for_user, user_security_compliance_state
 
 
 def current_student_for_user(user):
@@ -127,43 +128,6 @@ def redirect_parent_to_portal(request):
     if is_parent(request.user):
         return redirect("parent_unavailable")
     return None
-
-
-def is_staff_style_user(user):
-    return bool(
-        user
-        and user.is_authenticated
-        and (is_admin(user) or is_counsellor(user) or user.groups.filter(name="Viewer").exists())
-    )
-
-
-def user_security_compliance_state(user):
-    policy = SecurityPolicy.get_solo()
-    security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
-    issues = []
-
-    if is_staff_style_user(user) and policy.require_staff_domain_match and not policy.user_has_allowed_staff_email(user):
-        issues.append("email_domain")
-    password_age_days = security_profile.password_age_days()
-    if (
-        is_staff_style_user(user)
-        and policy.password_rotation_days
-        and security_profile.password_changed_at is not None
-        and password_age_days is not None
-        and password_age_days >= policy.password_rotation_days
-    ):
-        issues.append("password_rotation")
-    return {
-        "policy": policy,
-        "security_profile": security_profile,
-        "issues": issues,
-        "password_age_days": password_age_days,
-        "is_compliant": not issues,
-    }
-
-
-def mfa_required_for_user(user):
-    return is_staff_style_user(user) and SecurityPolicy.get_solo().require_mfa_for_staff
 
 
 def post_login_destination_for_user(user):
@@ -2450,25 +2414,7 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         policy = SecurityPolicy.get_solo()
-        users = list(
-            User.objects.select_related("security_profile", "counsellor_profile")
-            .prefetch_related("groups")
-            .order_by("username")
-        )
-        for user in users:
-            UserSecurityProfile.objects.get_or_create(user=user)
-        security_rows = []
-        for user in users:
-            compliance = user_security_compliance_state(user)
-            security_rows.append(
-                {
-                    "user": user,
-                    "profile": compliance["security_profile"],
-                    "issues": compliance["issues"],
-                    "password_age_days": compliance["password_age_days"],
-                    "is_compliant": compliance["is_compliant"],
-                }
-            )
+        security_rows = build_security_review_rows(policy=policy)
         context["policy_form"] = kwargs.get("policy_form") or SecurityPolicyForm(instance=policy)
         context["security_users"] = security_rows
         context["policy"] = policy
@@ -2478,6 +2424,7 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
             "reset_required": sum(1 for row in security_rows if row["profile"].must_reset_password),
             "stale_passwords": sum(1 for row in security_rows if "password_rotation" in row["issues"]),
             "mfa_enabled": sum(1 for row in security_rows if row["profile"].mfa_enabled),
+            "dormant_accounts": sum(1 for row in security_rows if row["dormant_for_review"]),
         }
         return context
 
@@ -2619,6 +2566,55 @@ class DatabaseBackupDownloadView(LoginRequiredMixin, View):
             raise Http404("Database file not found.")
         log_audit(request.user, "downloaded", request.user, {"section": "database_backup"})
         return FileResponse(open(db_path, "rb"), as_attachment=True, filename=f"uis-student-record-system-backup-{timezone.now():%Y%m%d-%H%M}.sqlite3")
+
+
+class SecurityReviewExportView(LoginRequiredMixin, View):
+    def get(self, request):
+        require_admin(request.user)
+        rows = build_security_review_rows()
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(
+            [
+                "Username",
+                "Name",
+                "Role",
+                "Email",
+                "Active",
+                "Locked",
+                "Reset Required",
+                "MFA Enabled",
+                "MFA Required",
+                "Password Age Days",
+                "Last Sign-In",
+                "Dormant For Review",
+                "Issues",
+            ]
+        )
+        for row in rows:
+            user = row["user"]
+            profile = row["profile"]
+            writer.writerow(
+                [
+                    user.username,
+                    user.get_full_name(),
+                    row["role_name"],
+                    user.email,
+                    "Yes" if user.is_active else "No",
+                    "Yes" if profile.manually_locked else "No",
+                    "Yes" if profile.must_reset_password else "No",
+                    "Yes" if profile.mfa_enabled else "No",
+                    "Yes" if row["mfa_required"] else "No",
+                    row["password_age_days"] if row["password_age_days"] is not None else "",
+                    timezone.localtime(user.last_login).isoformat() if user.last_login else "",
+                    "Yes" if row["dormant_for_review"] else "No",
+                    ", ".join(row["issues"]),
+                ]
+            )
+        response = HttpResponse(csv_buffer.getvalue(), content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="uis-security-review-{timezone.now():%Y%m%d-%H%M}.csv"'
+        log_audit(request.user, "downloaded", request.user, {"section": "security_review_export"})
+        return response
 
 
 class CsvExportDownloadView(LoginRequiredMixin, View):

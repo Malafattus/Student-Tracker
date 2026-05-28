@@ -2,6 +2,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth.models import Group, User
 from django.core.cache import cache
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import Client, TestCase
@@ -38,7 +39,7 @@ class CaseTrackerSmokeTests(TestCase):
     def setUp(self):
         cache.clear()
         ensure_roles()
-        self.admin_user = User.objects.create_user("admin", password="pass12345")
+        self.admin_user = User.objects.create_user("admin", email="admin@example.com", password="pass12345")
         self.admin_user.groups.add(Group.objects.get(name=ROLE_ADMIN))
         self.counsellor = User.objects.create_user("counsellor", email="counsellor@example.com", password="pass12345")
         self.counsellor.groups.add(Group.objects.get(name=ROLE_COUNSELLOR))
@@ -408,6 +409,14 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertContains(response, "Security Center")
         self.assertContains(response, "Non-compliant accounts")
 
+    def test_security_review_csv_export_is_available_to_admin(self):
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        response = client.get(reverse("security_review_export"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        self.assertIn("Username,Name,Role,Email", response.content.decode("utf-8"))
+
     def test_security_policy_can_restrict_staff_domains(self):
         policy = SecurityPolicy.get_solo()
         policy.require_staff_domain_match = True
@@ -501,6 +510,46 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertRedirects(response, reverse("mfa_challenge"))
         challenge_response = client.post(reverse("mfa_challenge"), {"code": current_totp_code(secret)})
         self.assertRedirects(challenge_response, reverse("dashboard"))
+
+    def test_mfa_can_be_required_for_student_accounts_too(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_mfa_for_all_accounts = True
+        policy.save()
+        portal_user = User.objects.create_user("student-mfa", email="studentmfa@example.com", password="pass12345")
+        portal_user.groups.add(Group.objects.get(name=ROLE_STUDENT))
+        StudentPortalAccess.objects.create(student=self.student, user=portal_user)
+        client = Client()
+        response = client.post(reverse("login"), {"username": "student-mfa", "password": "pass12345"})
+        self.assertRedirects(response, reverse("mfa_setup"))
+
+    def test_security_center_marks_dormant_accounts_for_review(self):
+        policy = SecurityPolicy.get_solo()
+        policy.dormant_account_review_days = 30
+        policy.save()
+        dormant_user = User.objects.create_user("viewer-old", email="viewer-old@example.com", password="pass12345")
+        dormant_user.groups.add(Group.objects.get(name="Viewer"))
+        dormant_user.last_login = timezone.now() - timedelta(days=45)
+        dormant_user.save(update_fields=["last_login"])
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        response = client.get(reverse("security_center"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dormant accounts")
+        self.assertContains(response, "Review for dormancy")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_security_review_digest_command_sends_email(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_mfa_for_all_accounts = True
+        policy.dormant_account_review_days = 30
+        policy.save()
+        dormant_user = User.objects.create_user("viewer-old", email="viewer-old@example.com", password="pass12345")
+        dormant_user.groups.add(Group.objects.get(name="Viewer"))
+        dormant_user.last_login = timezone.now() - timedelta(days=45)
+        dormant_user.save(update_fields=["last_login"])
+        call_command("send_security_review_digest")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("security review digest", mail.outbox[0].subject.lower())
 
     def test_student_portal_redirect_and_dashboard(self):
         portal_user = User.objects.create_user("student1", email="student1@example.com", password="pass12345")

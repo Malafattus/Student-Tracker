@@ -247,8 +247,10 @@ class SecurityPolicy(TimeStampedModel):
     block_noncompliant_staff_signins = models.BooleanField(default=False)
     require_password_reset_for_new_accounts = models.BooleanField(default=True)
     require_mfa_for_staff = models.BooleanField(default=False)
+    require_mfa_for_all_accounts = models.BooleanField(default=False)
     minimum_password_length = models.PositiveSmallIntegerField(default=10)
     password_rotation_days = models.PositiveSmallIntegerField(default=180)
+    dormant_account_review_days = models.PositiveSmallIntegerField(default=90)
 
     class Meta:
         verbose_name = "Security policy"
