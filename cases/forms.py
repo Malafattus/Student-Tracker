@@ -1,8 +1,9 @@
 from django import forms
 from django.contrib.auth import authenticate
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
 from django.contrib.auth.models import Group, User
 from django.db.models import Q
+from django.utils import timezone
 
 from .models import (
     AcademicTerm,
@@ -14,6 +15,7 @@ from .models import (
     FollowUpTask,
     ParentPortalAccess,
     PreparedReport,
+    SecurityPolicy,
     SessionChangeRequest,
     Student,
     StudentNote,
@@ -23,6 +25,7 @@ from .models import (
     StudentTermRecord,
     TermCourseEnrollment,
     CounsellorProfile,
+    UserSecurityProfile,
 )
 from .permissions import ROLE_NAMES, ensure_roles
 
@@ -223,6 +226,10 @@ class UserManagementForm(forms.ModelForm):
         widget=forms.PasswordInput(render_value=True),
         help_text="Leave blank when editing to keep the current password.",
     )
+    must_reset_password = forms.BooleanField(
+        required=False,
+        help_text="Force this user to set a fresh password the next time they sign in.",
+    )
 
     class Meta:
         model = User
@@ -237,13 +244,34 @@ class UserManagementForm(forms.ModelForm):
             profile = getattr(self.instance, "counsellor_profile", None)
             if profile:
                 self.fields["primary_team"].initial = profile.primary_team
+            security_profile = getattr(self.instance, "security_profile", None)
+            if security_profile:
+                self.fields["must_reset_password"].initial = security_profile.must_reset_password
         apply_bootstrap_classes(self)
 
     def clean_password(self):
         password = self.cleaned_data.get("password")
         if not self.instance.pk and not password:
             raise forms.ValidationError("A password is required when creating a new user.")
+        if password:
+            minimum_length = SecurityPolicy.get_solo().minimum_password_length
+            if len(password) < minimum_length:
+                raise forms.ValidationError(f"Passwords must be at least {minimum_length} characters long.")
         return password
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip()
+        role = self.cleaned_data.get("role") or ROLE_NAMES[2]
+        policy = SecurityPolicy.get_solo()
+        if (
+            email
+            and policy.require_staff_domain_match
+            and role in {"Admin", "Counsellor", "Viewer"}
+        ):
+            domain = email.split("@")[-1].lower() if "@" in email else ""
+            if domain not in policy.allowed_staff_domains:
+                raise forms.ValidationError("This email domain is not allowed for staff accounts.")
+        return email
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -264,6 +292,11 @@ class UserManagementForm(forms.ModelForm):
             elif profile and profile.primary_team:
                 profile.primary_team = ""
                 profile.save(update_fields=["primary_team", "updated_at"])
+            security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
+            security_profile.must_reset_password = self.cleaned_data.get("must_reset_password", False)
+            if password:
+                security_profile.password_changed_at = timezone.now()
+            security_profile.save()
         return user
 
 
@@ -307,6 +340,11 @@ class StudentPortalAccessForm(forms.Form):
         user.save()
         user.groups.clear()
         user.groups.add(Group.objects.get(name="Student"))
+        security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
+        security_profile.password_changed_at = timezone.now()
+        if not access and SecurityPolicy.get_solo().require_password_reset_for_new_accounts:
+            security_profile.must_reset_password = True
+        security_profile.save()
         if access:
             access.is_active = self.cleaned_data["is_active"]
             access.save(update_fields=["is_active", "updated_at"])
@@ -371,6 +409,12 @@ class ParentPortalAccessForm(forms.Form):
                 is_active=self.cleaned_data.get("is_active", True),
             )
             user.groups.add(Group.objects.get(name="Parent"))
+        security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
+        if not existing_account:
+            security_profile.password_changed_at = timezone.now()
+            if SecurityPolicy.get_solo().require_password_reset_for_new_accounts:
+                security_profile.must_reset_password = True
+        security_profile.save()
         access, _ = ParentPortalAccess.objects.update_or_create(
             student=self.student,
             user=user,
@@ -738,6 +782,55 @@ class CommunicationTemplateForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         apply_bootstrap_classes(self)
+
+
+class SecurityPolicyForm(forms.ModelForm):
+    class Meta:
+        model = SecurityPolicy
+        fields = [
+            "require_staff_domain_match",
+            "allowed_staff_email_domains",
+            "require_password_reset_for_new_accounts",
+            "minimum_password_length",
+        ]
+        widgets = {
+            "allowed_staff_email_domains": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["allowed_staff_email_domains"].help_text = "Separate multiple allowed domains with commas."
+        self.fields["minimum_password_length"].help_text = "Applies to passwords created or changed inside this app."
+        apply_bootstrap_classes(self)
+
+
+class UserSecurityProfileForm(forms.ModelForm):
+    class Meta:
+        model = UserSecurityProfile
+        fields = ["must_reset_password", "manually_locked", "security_note"]
+        widgets = {
+            "security_note": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_bootstrap_classes(self)
+
+
+class RequiredPasswordChangeForm(SetPasswordForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_bootstrap_classes(self)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get("new_password2")
+        if not password:
+            return cleaned_data
+        minimum_length = SecurityPolicy.get_solo().minimum_password_length
+        if len(password) < minimum_length:
+            raise forms.ValidationError(f"Passwords must be at least {minimum_length} characters long.")
+        return cleaned_data
 
 
 def apply_bootstrap_classes(form):

@@ -13,6 +13,7 @@ from .models import (
     FollowUpTask,
     ParentPortalAccess,
     PreparedReport,
+    SecurityPolicy,
     SessionChangeRequest,
     Student,
     StudentNote,
@@ -22,6 +23,7 @@ from .models import (
     StudentRequestResponse,
     StudentTermRecord,
     TermCourseEnrollment,
+    UserSecurityProfile,
 )
 
 
@@ -48,7 +50,9 @@ admin.site.register(StudentPortalAccess)
 admin.site.register(StudentTermRecord)
 admin.site.register(TermCourseEnrollment)
 admin.site.register(PreparedReport)
+admin.site.register(SecurityPolicy)
 admin.site.register(CounsellorProfile)
 admin.site.register(ParentPortalAccess)
 admin.site.register(CounsellorStudentAccess)
 admin.site.register(CounsellorAccessRequest)
+admin.site.register(UserSecurityProfile)

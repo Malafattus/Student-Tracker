@@ -14,6 +14,7 @@ class SessionIdleTimeoutMiddleware:
         exempt_paths = {
             getattr(settings, "LOGIN_URL", "/accounts/login/"),
             "/accounts/logout/",
+            "/accounts/password-change-required/",
         }
         if timeout_seconds and request.user.is_authenticated and request.path not in exempt_paths:
             now = timezone.now().timestamp()
@@ -24,6 +25,10 @@ class SessionIdleTimeoutMiddleware:
                     messages.info(request, "Your session expired after inactivity. Please sign in again.")
                 return redirect(settings.LOGIN_URL)
             request.session["last_activity_ts"] = now
+        if request.user.is_authenticated and request.path not in exempt_paths:
+            security_profile = getattr(request.user, "security_profile", None)
+            if security_profile and security_profile.must_reset_password:
+                return redirect("/accounts/password-change-required/")
         response = self.get_response(request)
         sensitive_prefixes = (
             "/students/",

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Security Center | UIS Student Record System{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 mb-1">Security Center</h1>
+    <p class="text-muted mb-0">Set baseline account rules, review staff account safety, and quickly tighten access when something needs attention.</p>
+</div>
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h2 class="h5 mb-0">Account policy</h2>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="save_policy">
+                    {{ policy_form.as_p }}
+                    <button class="btn btn-primary" type="submit">Save policy</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h2 class="h5 mb-0">Policy summary</h2>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">Staff email restriction</div>
+                            <div class="fw-semibold">{% if policy.require_staff_domain_match %}On{% else %}Off{% endif %}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">New account password reset</div>
+                            <div class="fw-semibold">{% if policy.require_password_reset_for_new_accounts %}Required{% else %}Not required{% endif %}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">Minimum password length</div>
+                            <div class="fw-semibold">{{ policy.minimum_password_length }} characters</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3 small text-muted">
+                    Allowed staff domains:
+                    {% if policy.allowed_staff_domains %}
+                        {{ policy.allowed_staff_domains|join:", " }}
+                    {% else %}
+                        No restriction set yet.
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+    <div class="card-header bg-white">
+        <h2 class="h5 mb-0">Account controls</h2>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Role</th>
+                    <th>Email</th>
+                    <th>Team</th>
+                    <th>Security status</th>
+                    <th>Password updated</th>
+                    <th style="width: 320px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in security_users %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ user.get_full_name|default:user.username }}</div>
+                            <div class="small text-muted">{{ user.username }}</div>
+                        </td>
+                        <td>{{ user.groups.first.name|default:"-" }}</td>
+                        <td>{{ user.email|default:"-" }}</td>
+                        <td>{{ user.counsellor_profile.primary_team|default:"-" }}</td>
+                        <td>
+                            {% if user.security_profile.manually_locked %}
+                                <span class="badge text-bg-danger">Locked</span>
+                            {% endif %}
+                            {% if user.security_profile.must_reset_password %}
+                                <span class="badge text-bg-warning">Reset required</span>
+                            {% endif %}
+                            {% if not user.security_profile.manually_locked and not user.security_profile.must_reset_password %}
+                                <span class="badge text-bg-success">Normal</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user.security_profile.password_changed_at|date:"M j, Y g:i A"|default:"Not recorded" }}</td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-2">
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="user_id" value="{{ user.pk }}">
+                                    {% if user.security_profile.manually_locked %}
+                                        <button class="btn btn-sm btn-outline-success" name="action" value="unlock_user" type="submit">Unlock</button>
+                                    {% else %}
+                                        <button class="btn btn-sm btn-outline-danger" name="action" value="lock_user" type="submit">Lock</button>
+                                    {% endif %}
+                                </form>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="user_id" value="{{ user.pk }}">
+                                    {% if user.security_profile.must_reset_password %}
+                                        <button class="btn btn-sm btn-outline-secondary" name="action" value="clear_reset" type="submit">Clear reset</button>
+                                    {% else %}
+                                        <button class="btn btn-sm btn-outline-warning" name="action" value="force_reset" type="submit">Force reset</button>
+                                    {% endif %}
+                                </form>
+                            </div>
+                            <form method="post" class="mt-2">
+                                {% csrf_token %}
+                                <input type="hidden" name="user_id" value="{{ user.pk }}">
+                                <input type="hidden" name="action" value="save_note">
+                                <textarea class="form-control form-control-sm" name="security_note" rows="2" placeholder="Security note">{{ user.security_profile.security_note }}</textarea>
+                                <button class="btn btn-sm btn-outline-primary mt-2" type="submit">Save note</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-muted text-center py-4">No users found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

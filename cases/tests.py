@@ -21,12 +21,14 @@ from .models import (
     FollowUpTask,
     ParentPortalAccess,
     PreparedReport,
+    SecurityPolicy,
     SessionChangeRequest,
     Student,
     StudentPortalAccess,
     StudentRequest,
     StudentTermRecord,
     TermCourseEnrollment,
+    UserSecurityProfile,
 )
 from .permissions import ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_PARENT, ROLE_STUDENT, ensure_roles
 
@@ -348,6 +350,85 @@ class CaseTrackerSmokeTests(TestCase):
         self.admin_user.save()
         response = self.client.post(reverse("login"), {"username": "admin@example.com", "password": "pass12345"})
         self.assertEqual(response.status_code, 302)
+
+    def test_manually_locked_user_cannot_sign_in(self):
+        locked_user = User.objects.create_user("locked-user", email="locked@example.com", password="pass12345")
+        locked_user.groups.add(Group.objects.get(name=ROLE_COUNSELLOR))
+        UserSecurityProfile.objects.create(user=locked_user, manually_locked=True)
+        response = self.client.post(reverse("login"), {"username": "locked-user", "password": "pass12345"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This account has been locked")
+        self.assertTrue(
+            AuditLog.objects.filter(model_name="SecurityEvent", action="login_blocked").exists()
+        )
+
+    @override_settings(LOGIN_FAILURE_LIMIT=3, LOGIN_LOCKOUT_SECONDS=900)
+    def test_login_lockout_after_repeated_failures(self):
+        for _ in range(3):
+            response = self.client.post(reverse("login"), {"username": "admin", "password": "wrong-pass"})
+            self.assertEqual(response.status_code, 200)
+        blocked_response = self.client.post(reverse("login"), {"username": "admin", "password": "pass12345"})
+        self.assertEqual(blocked_response.status_code, 200)
+        self.assertContains(blocked_response, "Too many sign-in attempts were made")
+        self.assertTrue(
+            AuditLog.objects.filter(model_name="SecurityEvent", action="login_locked").exists()
+        )
+
+    @override_settings(LOGIN_FAILURE_LIMIT=3, LOGIN_LOCKOUT_SECONDS=900)
+    def test_successful_login_clears_failure_counter(self):
+        response = self.client.post(reverse("login"), {"username": "admin", "password": "wrong-pass"})
+        self.assertEqual(response.status_code, 200)
+        success_response = self.client.post(reverse("login"), {"username": "admin", "password": "pass12345"})
+        self.assertEqual(success_response.status_code, 302)
+        response_after_success = self.client.post(reverse("login"), {"username": "admin", "password": "wrong-pass"})
+        self.assertEqual(response_after_success.status_code, 200)
+
+    def test_forced_password_reset_redirects_until_completed(self):
+        UserSecurityProfile.objects.create(user=self.counsellor, must_reset_password=True)
+        client = Client()
+        response = client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertRedirects(response, reverse("password_change_required"))
+        dashboard_response = client.get(reverse("dashboard"))
+        self.assertRedirects(dashboard_response, reverse("password_change_required"))
+        update_response = client.post(
+            reverse("password_change_required"),
+            {"new_password1": "freshpass123", "new_password2": "freshpass123"},
+        )
+        self.assertRedirects(update_response, reverse("dashboard"))
+        self.counsellor.refresh_from_db()
+        self.assertFalse(self.counsellor.security_profile.must_reset_password)
+        self.assertTrue(self.counsellor.check_password("freshpass123"))
+
+    def test_security_center_is_available_to_admin(self):
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        response = client.get(reverse("security_center"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Security Center")
+
+    def test_security_policy_can_restrict_staff_domains(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_staff_domain_match = True
+        policy.allowed_staff_email_domains = "uis.edu"
+        policy.save()
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        response = client.post(
+            reverse("user_management"),
+            {
+                "first_name": "New",
+                "last_name": "Counsellor",
+                "username": "newcounsellor",
+                "email": "newcounsellor@gmail.com",
+                "is_active": "on",
+                "role": ROLE_COUNSELLOR,
+                "primary_team": "Korean Team",
+                "password": "securepass123",
+                "must_reset_password": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This email domain is not allowed for staff accounts.")
 
     def test_student_portal_redirect_and_dashboard(self):
         portal_user = User.objects.create_user("student1", email="student1@example.com", password="pass12345")

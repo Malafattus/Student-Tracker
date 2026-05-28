@@ -9,6 +9,15 @@
     <div class="col-lg-6">
         <div class="card shadow-sm">
             <div class="card-body">
+                <h2 class="h5">Security Center</h2>
+                <p class="text-muted">Review account lockouts, password reset requirements, and staff email rules in one place.</p>
+                <a class="btn btn-outline-dark" href="{% url 'security_center' %}">Open security center</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
                 <h2 class="h5">SQLite Backup</h2>
                 <p class="text-muted">Download the live SQLite database file for a full point-in-time backup.</p>
                 <a class="btn btn-primary" href="{% url 'download_db_backup' %}">Download database</a>

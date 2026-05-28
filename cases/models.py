@@ -218,6 +218,45 @@ class CounsellorProfile(TimeStampedModel):
         return self.user.get_full_name() or self.user.username
 
 
+class UserSecurityProfile(TimeStampedModel):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="security_profile")
+    must_reset_password = models.BooleanField(default=False)
+    manually_locked = models.BooleanField(default=False)
+    password_changed_at = models.DateTimeField(blank=True, null=True)
+    security_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["user__username"]
+
+    def __str__(self):
+        return f"Security profile for {self.user.get_full_name() or self.user.username}"
+
+
+class SecurityPolicy(TimeStampedModel):
+    require_staff_domain_match = models.BooleanField(default=False)
+    allowed_staff_email_domains = models.TextField(blank=True)
+    require_password_reset_for_new_accounts = models.BooleanField(default=True)
+    minimum_password_length = models.PositiveSmallIntegerField(default=10)
+
+    class Meta:
+        verbose_name = "Security policy"
+        verbose_name_plural = "Security policy"
+
+    def __str__(self):
+        return "Security policy"
+
+    @property
+    def allowed_staff_domains(self):
+        return [item.strip().lower() for item in self.allowed_staff_email_domains.split(",") if item.strip()]
+
+    @classmethod
+    def get_solo(cls):
+        policy = cls.objects.first()
+        if policy:
+            return policy
+        return cls.objects.create()
+
+
 class AcademicTerm(TimeStampedModel):
     school_year = models.CharField(max_length=20)
     name = models.CharField(max_length=100)
