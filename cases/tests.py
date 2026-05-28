@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from django.contrib.auth.models import Group, User
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import Client, TestCase
@@ -10,6 +11,7 @@ from django.utils import timezone
 
 from .models import (
     AcademicTerm,
+    AuditLog,
     CommunicationLog,
     CommunicationTemplate,
     CounsellorAccessRequest,
@@ -31,6 +33,7 @@ from .permissions import ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_PARENT, ROLE_STUDENT,
 
 class CaseTrackerSmokeTests(TestCase):
     def setUp(self):
+        cache.clear()
         ensure_roles()
         self.admin_user = User.objects.create_user("admin", password="pass12345")
         self.admin_user.groups.add(Group.objects.get(name=ROLE_ADMIN))
@@ -53,6 +56,7 @@ class CaseTrackerSmokeTests(TestCase):
         response = client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Academic watchlist")
+        self.assertIn("no-store", response["Cache-Control"])
 
     def test_dashboard_shows_academic_watchlist_and_pending_access_request(self):
         self.student.required_credits = 30
@@ -86,6 +90,9 @@ class CaseTrackerSmokeTests(TestCase):
         response = client.get(reverse("student_detail", args=[self.student.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Case stage and next steps")
+        self.assertTrue(
+            AuditLog.objects.filter(action="viewed", model_name="Student", details__section="student_record").exists()
+        )
 
     def test_student_detail_shows_checkpoint_tracker(self):
         term = AcademicTerm.objects.create(
@@ -217,6 +224,26 @@ class CaseTrackerSmokeTests(TestCase):
         request_item = StudentRequest.objects.get()
         self.assertEqual(request_item.student, self.student)
         self.assertEqual(request_item.assigned_to, self.counsellor)
+
+    def test_public_request_form_throttles_repeated_submissions(self):
+        payload = {
+            "submitted_by_name": "Jamie Student",
+            "submitted_by_email": "jamie@example.com",
+            "student_identifier": "S9999",
+            "request_type": StudentRequest.REQUEST_TRANSCRIPT,
+            "title": "Need official transcript",
+            "details": "Please prepare a transcript for university application.",
+            "preferred_time": "After school",
+        }
+        for _ in range(5):
+            response = self.client.post(reverse("student_request_public"), payload)
+            self.assertEqual(response.status_code, 302)
+        blocked_response = self.client.post(reverse("student_request_public"), payload)
+        self.assertEqual(blocked_response.status_code, 200)
+        self.assertContains(blocked_response, "Too many requests were submitted in a short period")
+        self.assertTrue(
+            AuditLog.objects.filter(model_name="SecurityEvent", action="throttled").exists()
+        )
 
     def test_counsellor_can_see_public_student_requests_in_queue(self):
         StudentRequest.objects.create(
@@ -690,6 +717,9 @@ class CaseTrackerSmokeTests(TestCase):
         client.login(username="parent-secure", password="pass12345")
         response = client.get(reverse("prepared_report_attachment", args=[report.pk]))
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            AuditLog.objects.filter(action="downloaded", details__section="prepared_report_attachment").exists()
+        )
 
     @override_settings(SESSION_IDLE_TIMEOUT_SECONDS=1)
     def test_idle_session_timeout_logs_user_out(self):
@@ -700,3 +730,10 @@ class CaseTrackerSmokeTests(TestCase):
         session.save()
         response = client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 302)
+
+    def test_admin_tools_shows_security_activity(self):
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        response = client.get(reverse("admin_tools"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Recent security activity")

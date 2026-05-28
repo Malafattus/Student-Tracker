@@ -9,6 +9,7 @@ from django.contrib import messages
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404, HttpResponse
@@ -18,7 +19,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
-from .audit import log_audit
+from .audit import log_audit, log_security_event
 from .forms import (
     CommunicationTemplateForm,
     CounsellorAccessRequestForm,
@@ -312,6 +313,17 @@ def file_response_for_field(file_field, download_name):
         raise Http404("File not found.")
     file_field.open("rb")
     return FileResponse(file_field, as_attachment=False, filename=download_name)
+
+
+def client_ip_address(request):
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "unknown")
+
+
+def throttle_cache_key(prefix, identifier):
+    return f"security:{prefix}:{identifier.casefold() if isinstance(identifier, str) else identifier}"
 
 
 def build_academic_progress_rows(students):
@@ -621,6 +633,7 @@ class PortalDashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         student = current_student_for_user(self.request.user)
+        log_audit(self.request.user, "viewed", student, {"section": "student_portal"})
         requests = student.requests.prefetch_related("attachments", "responses").order_by("-created_at")
         sessions = student.sessions.order_by("start_at")
         next_session = sessions.filter(start_at__gte=timezone.now()).first()
@@ -681,6 +694,15 @@ class ParentDashboardView(LoginRequiredMixin, TemplateView):
             student_queryset_for_user(self.request.user)
             .prefetch_related("documents", "requests__attachments", "requests__responses", "sessions", "term_records__term", "term_records__courses")
             .order_by("full_name")
+        )
+        log_security_event(
+            "viewed",
+            "Parent portal dashboard",
+            {
+                "section": "parent_portal",
+                "student_count": students.count(),
+            },
+            actor=self.request.user,
         )
         family_records = []
         for student in students:
@@ -906,6 +928,7 @@ class StudentDetailView(LoginRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        log_audit(self.request.user, "viewed", self.object, {"section": "student_record"})
         active_requests = self.object.requests.exclude(status=StudentRequest.STATUS_CLOSED)
         closed_requests = self.object.requests.filter(status=StudentRequest.STATUS_CLOSED)
         active_tasks = self.object.tasks.filter(is_closed=False)
@@ -1198,6 +1221,8 @@ class StudentRequestPublicCreateView(CreateView):
     model = StudentRequest
     form_class = StudentRequestPublicForm
     template_name = "cases/student_request_public.html"
+    throttle_limit = 5
+    throttle_window_seconds = 900
 
     def get_initial(self):
         initial = super().get_initial()
@@ -1212,7 +1237,42 @@ class StudentRequestPublicCreateView(CreateView):
             )
         return initial
 
+    def is_throttled(self, email):
+        ip_address = client_ip_address(self.request)
+        identifiers = [
+            throttle_cache_key("public-request-ip", ip_address),
+            throttle_cache_key("public-request-email", email or "unknown"),
+        ]
+        for key in identifiers:
+            if (cache.get(key) or 0) >= self.throttle_limit:
+                return True
+        return False
+
+    def record_submission(self, email):
+        ip_address = client_ip_address(self.request)
+        identifiers = [
+            throttle_cache_key("public-request-ip", ip_address),
+            throttle_cache_key("public-request-email", email or "unknown"),
+        ]
+        for key in identifiers:
+            current = cache.get(key) or 0
+            cache.set(key, current + 1, self.throttle_window_seconds)
+
     def form_valid(self, form):
+        submitter_email = form.cleaned_data.get("submitted_by_email", "")
+        if self.is_throttled(submitter_email):
+            log_security_event(
+                "throttled",
+                "Public student request form",
+                {
+                    "section": "public_request_throttle",
+                    "ip_address": client_ip_address(self.request),
+                    "email": submitter_email,
+                },
+                actor=self.request.user,
+            )
+            form.add_error(None, "Too many requests were submitted in a short period. Please wait a little and try again.")
+            return self.form_invalid(form)
         matched_student = current_student_for_user(self.request.user)
         student_identifier = form.cleaned_data.get("student_identifier")
         if not matched_student and student_identifier:
@@ -1220,6 +1280,7 @@ class StudentRequestPublicCreateView(CreateView):
         form.instance.student = matched_student
         assign_request_owner(form.instance)
         response = super().form_valid(form)
+        self.record_submission(submitter_email)
         save_request_attachments(self.object, self.request.FILES.getlist("attachments"), self.request.user if self.request.user.is_authenticated else None)
         send_request_confirmation(self.object)
         log_audit(self.request.user, "created", self.object, {"section": "public_request"})
@@ -1958,6 +2019,7 @@ class PreparedReportUpdateView(LoginRequiredMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["student"] = self.object.student
+        log_audit(self.request.user, "viewed", self.object, {"section": "prepared_report"})
         return context
 
     def post(self, request, *args, **kwargs):
@@ -2152,6 +2214,21 @@ class AdminToolsView(LoginRequiredMixin, TemplateView):
     def dispatch(self, request, *args, **kwargs):
         require_admin(request.user)
         return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        security_logs = AuditLog.objects.filter(
+            Q(action="downloaded")
+            | Q(model_name="SecurityEvent")
+            | Q(action="viewed")
+        ).select_related("actor")[:20]
+        context["security_summary"] = {
+            "downloads": AuditLog.objects.filter(action="downloaded").count(),
+            "throttled": AuditLog.objects.filter(model_name="SecurityEvent", action="throttled").count(),
+            "record_views": AuditLog.objects.filter(action="viewed").count(),
+        }
+        context["security_logs"] = security_logs
+        return context
 
 
 class DatabaseBackupDownloadView(LoginRequiredMixin, View):
