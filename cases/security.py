@@ -1,4 +1,5 @@
 from datetime import timedelta
+import ipaddress
 
 from django.conf import settings
 
@@ -68,6 +69,28 @@ def local_staff_login_allowed(user, policy=None):
     return user.username.lower() in policy.break_glass_accounts
 
 
+def staff_ip_allowed(ip_address, user=None, policy=None):
+    policy = policy or SecurityPolicy.get_solo()
+    if not policy.restrict_staff_to_allowed_ip_ranges:
+        return True
+    if user and user.username.lower() in policy.break_glass_accounts:
+        return True
+    try:
+        address = ipaddress.ip_address(ip_address)
+    except ValueError:
+        return False
+    for item in policy.allowed_ip_ranges:
+        try:
+            if "/" in item:
+                if address in ipaddress.ip_network(item, strict=False):
+                    return True
+            elif address == ipaddress.ip_address(item):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def governance_readiness(policy=None, now=None):
     policy = policy or SecurityPolicy.get_solo()
     now = now or timezone.localdate()
@@ -80,6 +103,7 @@ def governance_readiness(policy=None, now=None):
         "security_test": bool(policy.last_security_test_at),
         "operations_review": bool(policy.last_operations_review_at),
         "school_auth": school_managed_auth_ready(policy=policy),
+        "staff_ip_ranges": (not policy.restrict_staff_to_allowed_ip_ranges) or bool(policy.allowed_ip_ranges),
     }
     return {
         "checks": checks,

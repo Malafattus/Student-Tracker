@@ -246,6 +246,8 @@ class SecurityPolicy(TimeStampedModel):
     require_staff_domain_match = models.BooleanField(default=False)
     allowed_staff_email_domains = models.TextField(blank=True)
     block_noncompliant_staff_signins = models.BooleanField(default=False)
+    restrict_staff_to_allowed_ip_ranges = models.BooleanField(default=False)
+    allowed_staff_ip_ranges = models.TextField(blank=True)
     require_school_managed_auth_for_staff = models.BooleanField(default=False)
     break_glass_usernames = models.TextField(blank=True)
     require_password_reset_for_new_accounts = models.BooleanField(default=True)
@@ -275,6 +277,10 @@ class SecurityPolicy(TimeStampedModel):
     @property
     def allowed_staff_domains(self):
         return [item.strip().lower() for item in self.allowed_staff_email_domains.split(",") if item.strip()]
+
+    @property
+    def allowed_ip_ranges(self):
+        return [item.strip() for item in self.allowed_staff_ip_ranges.split(",") if item.strip()]
 
     @property
     def break_glass_accounts(self):

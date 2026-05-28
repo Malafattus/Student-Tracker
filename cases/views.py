@@ -112,6 +112,7 @@ from .security import (
     local_staff_login_allowed,
     mfa_required_for_user,
     school_managed_auth_ready,
+    staff_ip_allowed,
     user_security_compliance_state,
 )
 
@@ -335,6 +336,20 @@ class RoleAwareLoginView(auth_views.LoginView):
                 actor=form.get_user(),
             )
             messages.error(self.request, "This staff account email does not meet the current school access policy.")
+            return self.get(self.request)
+        if not staff_ip_allowed(client_ip_address(self.request), user=form.get_user(), policy=compliance["policy"]):
+            log_security_event(
+                "login_blocked",
+                "Blocked staff login outside allowed IP range",
+                {
+                    "section": "staff_ip_restriction",
+                    "login_identifier": self.login_identifier(),
+                    "ip_address": client_ip_address(self.request),
+                    "user_id": form.get_user().pk,
+                },
+                actor=form.get_user(),
+            )
+            messages.error(self.request, "This staff account must sign in from an approved school or VPN network.")
             return self.get(self.request)
         if not local_staff_login_allowed(form.get_user(), policy=compliance["policy"]):
             log_security_event(

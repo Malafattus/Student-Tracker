@@ -544,6 +544,30 @@ class CaseTrackerSmokeTests(TestCase):
             AuditLog.objects.filter(model_name="SecurityEvent", action="login_blocked", details__section="staff_email_restriction").exists()
         )
 
+    def test_staff_login_can_be_restricted_to_allowed_ip_ranges(self):
+        policy = SecurityPolicy.get_solo()
+        policy.restrict_staff_to_allowed_ip_ranges = True
+        policy.allowed_staff_ip_ranges = "10.0.0.0/24"
+        policy.save()
+        blocked_client = Client(REMOTE_ADDR="198.51.100.20")
+        blocked_response = blocked_client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertEqual(blocked_response.status_code, 200)
+        self.assertContains(blocked_response, "approved school or VPN network")
+        allowed_client = Client(REMOTE_ADDR="10.0.0.25")
+        allowed_response = allowed_client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertEqual(allowed_response.status_code, 302)
+
+    def test_staff_session_is_ended_when_ip_restriction_no_longer_matches(self):
+        policy = SecurityPolicy.get_solo()
+        policy.restrict_staff_to_allowed_ip_ranges = True
+        policy.allowed_staff_ip_ranges = "10.0.0.0/24"
+        policy.save()
+        client = Client(REMOTE_ADDR="10.0.0.25")
+        login_response = client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertEqual(login_response.status_code, 302)
+        response = client.get(reverse("dashboard"), REMOTE_ADDR="198.51.100.20")
+        self.assertRedirects(response, reverse("login"))
+
     def test_staff_local_login_can_be_disabled_for_school_managed_auth(self):
         policy = SecurityPolicy.get_solo()
         policy.require_school_managed_auth_for_staff = True
