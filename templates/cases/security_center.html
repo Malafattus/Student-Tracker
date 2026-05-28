@@ -78,6 +78,12 @@
                     </div>
                     <div class="col-md-4">
                         <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">Staff IP restriction</div>
+                            <div class="fw-semibold">{% if policy.restrict_staff_to_allowed_ip_ranges %}On{% else %}Off{% endif %}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
                             <div class="small text-muted mb-1">MFA for staff</div>
                             <div class="fw-semibold">{% if policy.require_mfa_for_staff %}Required{% else %}Optional{% endif %}</div>
                         </div>
@@ -107,6 +113,14 @@
                         {{ policy.allowed_staff_domains|join:", " }}
                     {% else %}
                         No restriction set yet.
+                    {% endif %}
+                </div>
+                <div class="mt-2 small text-muted">
+                    Allowed staff IP ranges:
+                    {% if policy.allowed_ip_ranges %}
+                        {{ policy.allowed_ip_ranges|join:", " }}
+                    {% else %}
+                        No IP restriction set yet.
                     {% endif %}
                 </div>
                 <div class="mt-2 small text-muted">

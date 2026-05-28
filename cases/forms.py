@@ -816,6 +816,8 @@ class SecurityPolicyForm(forms.ModelForm):
             "require_staff_domain_match",
             "allowed_staff_email_domains",
             "block_noncompliant_staff_signins",
+            "restrict_staff_to_allowed_ip_ranges",
+            "allowed_staff_ip_ranges",
             "require_school_managed_auth_for_staff",
             "break_glass_usernames",
             "require_password_reset_for_new_accounts",
@@ -837,6 +839,7 @@ class SecurityPolicyForm(forms.ModelForm):
         ]
         widgets = {
             "allowed_staff_email_domains": forms.Textarea(attrs={"rows": 3}),
+            "allowed_staff_ip_ranges": forms.Textarea(attrs={"rows": 3}),
             "break_glass_usernames": forms.Textarea(attrs={"rows": 2}),
             "last_privacy_review_at": forms.DateInput(attrs={"type": "date"}),
             "last_security_test_at": forms.DateInput(attrs={"type": "date"}),
@@ -848,6 +851,8 @@ class SecurityPolicyForm(forms.ModelForm):
         self.fields["allowed_staff_email_domains"].help_text = "Separate multiple allowed domains with commas."
         self.fields["minimum_password_length"].help_text = "Applies to passwords created or changed inside this app."
         self.fields["block_noncompliant_staff_signins"].help_text = "If turned on, staff who do not match the allowed email rules will be blocked from signing in."
+        self.fields["restrict_staff_to_allowed_ip_ranges"].help_text = "Limit staff-style access to approved school or VPN IP ranges."
+        self.fields["allowed_staff_ip_ranges"].help_text = "Enter approved IP addresses or CIDR ranges, separated with commas. Example: 203.0.113.10, 203.0.113.0/24"
         self.fields["require_school_managed_auth_for_staff"].help_text = "Turn this on when staff must sign in through the school's identity system instead of local passwords."
         self.fields["break_glass_usernames"].help_text = "Optional emergency local staff accounts that may still sign in directly. Separate multiple usernames with commas."
         self.fields["require_mfa_for_staff"].help_text = "Require staff-style accounts to complete a verification code step at sign-in."

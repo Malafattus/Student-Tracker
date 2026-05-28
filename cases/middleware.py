@@ -7,6 +7,14 @@ from django.shortcuts import redirect
 from django.utils import timezone
 
 from .audit import log_security_event
+from .security import is_staff_style_user, staff_ip_allowed
+
+
+def request_ip_address(request):
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "unknown")
 
 
 class TrustedIdentityHeaderMiddleware:
@@ -64,6 +72,20 @@ class SessionIdleTimeoutMiddleware:
             request.session["last_activity_ts"] = now
         if request.user.is_authenticated and request.path not in exempt_paths:
             security_profile = getattr(request.user, "security_profile", None)
+            if is_staff_style_user(request.user) and not staff_ip_allowed(
+                request_ip_address(request),
+                user=request.user,
+            ):
+                logout(request)
+                if hasattr(request, "_messages"):
+                    messages.info(request, "This staff account must use an approved school or VPN network.")
+                log_security_event(
+                    "session_blocked",
+                    "Blocked staff session outside allowed IP range",
+                    {"section": "staff_ip_restriction", "ip_address": request_ip_address(request)},
+                    actor=request.user,
+                )
+                return redirect(settings.LOGIN_URL)
             auth_completed_at = request.session.get("auth_completed_at")
             if security_profile and security_profile.session_revoked_at:
                 revoked_ts = security_profile.session_revoked_at.timestamp()
