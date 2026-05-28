@@ -307,6 +307,13 @@ def reopen_session_item(session):
     session.save(update_fields=["is_closed", "closed_by", "closed_at", "updated_at"])
 
 
+def file_response_for_field(file_field, download_name):
+    if not file_field:
+        raise Http404("File not found.")
+    file_field.open("rb")
+    return FileResponse(file_field, as_attachment=False, filename=download_name)
+
+
 def build_academic_progress_rows(students):
     checkpoint_rows = []
     student_watch_rows = []
@@ -1987,6 +1994,72 @@ class PreparedReportUpdateView(LoginRequiredMixin, UpdateView):
         return response
 
 
+class RequestAttachmentDownloadView(LoginRequiredMixin, View):
+    def get(self, request, pk):
+        attachment = get_object_or_404(
+            StudentRequestAttachment.objects.select_related("request__student"),
+            pk=pk,
+        )
+        student = attachment.request.student
+        if not student or not can_view_student(request.user, student):
+            messages.error(request, "You do not have permission to access this file.")
+            return redirect("dashboard")
+        log_audit(
+            request.user,
+            "downloaded",
+            attachment,
+            {"section": "request_attachment", "student_id": student.pk, "request_id": attachment.request_id},
+        )
+        return file_response_for_field(attachment.file, attachment.original_name or attachment.file.name.rsplit("/", 1)[-1])
+
+
+class RequestResponseAttachmentDownloadView(LoginRequiredMixin, View):
+    def get(self, request, pk):
+        response_item = get_object_or_404(
+            StudentRequestResponse.objects.select_related("request__student"),
+            pk=pk,
+        )
+        student = response_item.request.student
+        if not student or not can_view_student(request.user, student):
+            messages.error(request, "You do not have permission to access this file.")
+            return redirect("dashboard")
+        if not response_item.attachment:
+            raise Http404("File not found.")
+        log_audit(
+            request.user,
+            "downloaded",
+            response_item,
+            {"section": "request_response_attachment", "student_id": student.pk, "request_id": response_item.request_id},
+        )
+        return file_response_for_field(
+            response_item.attachment,
+            response_item.attachment.name.rsplit("/", 1)[-1],
+        )
+
+
+class PreparedReportAttachmentDownloadView(LoginRequiredMixin, View):
+    def get(self, request, pk):
+        report = get_object_or_404(
+            PreparedReport.objects.select_related("student"),
+            pk=pk,
+        )
+        if not can_view_student(request.user, report.student):
+            messages.error(request, "You do not have permission to access this file.")
+            return redirect("dashboard")
+        if not report.attachment:
+            raise Http404("File not found.")
+        log_audit(
+            request.user,
+            "downloaded",
+            report,
+            {"section": "prepared_report_attachment", "student_id": report.student_id},
+        )
+        return file_response_for_field(
+            report.attachment,
+            report.attachment.name.rsplit("/", 1)[-1],
+        )
+
+
 class CommunicationCenterView(LoginRequiredMixin, TemplateView):
     template_name = "cases/communication_center.html"
 
@@ -2087,6 +2160,7 @@ class DatabaseBackupDownloadView(LoginRequiredMixin, View):
         db_path = settings.BASE_DIR / "db.sqlite3"
         if not db_path.exists():
             raise Http404("Database file not found.")
+        log_audit(request.user, "downloaded", request.user, {"section": "database_backup"})
         return FileResponse(open(db_path, "rb"), as_attachment=True, filename=f"uis-student-record-system-backup-{timezone.now():%Y%m%d-%H%M}.sqlite3")
 
 
@@ -2102,6 +2176,7 @@ class CsvExportDownloadView(LoginRequiredMixin, View):
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="uis-student-record-system-exports-{timezone.now():%Y%m%d-%H%M}.zip"'
+        log_audit(request.user, "downloaded", request.user, {"section": "csv_export"})
         return response
 
     def _write_students_csv(self, archive):

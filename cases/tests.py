@@ -1,8 +1,10 @@
 from datetime import date, timedelta
 
 from django.contrib.auth.models import Group, User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import Client, TestCase
+from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -644,3 +646,57 @@ class CaseTrackerSmokeTests(TestCase):
         session.refresh_from_db()
         self.assertFalse(session.is_closed)
         self.assertIsNone(session.closed_at)
+
+    def test_request_attachment_download_requires_access(self):
+        request_item = StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_DOCUMENT,
+            title="Need supporting file",
+            details="Please review this upload.",
+        )
+        attachment = request_item.attachments.create(
+            original_name="proof.pdf",
+            file=SimpleUploadedFile("proof.pdf", b"test-file", content_type="application/pdf"),
+        )
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("request_attachment_download", args=[attachment.pk]))
+        self.assertEqual(response.status_code, 200)
+
+        blocked_user = User.objects.create_user("outsider", password="pass12345")
+        blocked_user.groups.add(Group.objects.get(name=ROLE_PARENT))
+        blocked_client = Client()
+        blocked_client.login(username="outsider", password="pass12345")
+        blocked_response = blocked_client.get(reverse("request_attachment_download", args=[attachment.pk]))
+        self.assertEqual(blocked_response.status_code, 302)
+
+    def test_prepared_report_attachment_download_requires_access(self):
+        report = PreparedReport.objects.create(
+            student=self.student,
+            prepared_by=self.counsellor,
+            audience=PreparedReport.AUDIENCE_PARENT,
+            title="Secure report",
+            recipient_email="parent@example.com",
+            attachment=SimpleUploadedFile("report.pdf", b"report-file", content_type="application/pdf"),
+        )
+        parent_user = User.objects.create_user("parent-secure", email="parent-secure@example.com", password="pass12345")
+        parent_user.groups.add(Group.objects.get(name=ROLE_PARENT))
+        ParentPortalAccess.objects.create(student=self.student, user=parent_user)
+        client = Client()
+        client.login(username="parent-secure", password="pass12345")
+        response = client.get(reverse("prepared_report_attachment", args=[report.pk]))
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(SESSION_IDLE_TIMEOUT_SECONDS=1)
+    def test_idle_session_timeout_logs_user_out(self):
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        session = client.session
+        session["last_activity_ts"] = timezone.now().timestamp() - 120
+        session.save()
+        response = client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 302)
