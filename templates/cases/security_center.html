@@ -46,6 +46,24 @@
                             <div class="fw-semibold">{{ policy.minimum_password_length }} characters</div>
                         </div>
                     </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">Password rotation</div>
+                            <div class="fw-semibold">{{ policy.password_rotation_days }} days</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">Block non-compliant sign-ins</div>
+                            <div class="fw-semibold">{% if policy.block_noncompliant_staff_signins %}On{% else %}Off{% endif %}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">MFA for staff</div>
+                            <div class="fw-semibold">{% if policy.require_mfa_for_staff %}Required{% else %}Optional{% endif %}</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="mt-3 small text-muted">
                     Allowed staff domains:
@@ -57,6 +75,24 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Non-compliant accounts</div><div class="h3 mb-0">{{ security_overview.noncompliant }}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Locked accounts</div><div class="h3 mb-0">{{ security_overview.locked }}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Reset required</div><div class="h3 mb-0">{{ security_overview.reset_required }}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Stale passwords</div><div class="h3 mb-0">{{ security_overview.stale_passwords }}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">MFA enabled</div><div class="h3 mb-0">{{ security_overview.mfa_enabled }}</div></div></div>
     </div>
 </div>
 
@@ -74,6 +110,7 @@
                     <th>Team</th>
                     <th>Security status</th>
                     <th>Password updated</th>
+                    <th>MFA</th>
                     <th style="width: 320px;">Actions</th>
                 </tr>
             </thead>
@@ -81,30 +118,53 @@
                 {% for user in security_users %}
                     <tr>
                         <td>
-                            <div class="fw-semibold">{{ user.get_full_name|default:user.username }}</div>
-                            <div class="small text-muted">{{ user.username }}</div>
+                            <div class="fw-semibold">{{ user.user.get_full_name|default:user.user.username }}</div>
+                            <div class="small text-muted">{{ user.user.username }}</div>
                         </td>
-                        <td>{{ user.groups.first.name|default:"-" }}</td>
-                        <td>{{ user.email|default:"-" }}</td>
-                        <td>{{ user.counsellor_profile.primary_team|default:"-" }}</td>
+                        <td>{{ user.user.groups.first.name|default:"-" }}</td>
+                        <td>{{ user.user.email|default:"-" }}</td>
+                        <td>{{ user.user.counsellor_profile.primary_team|default:"-" }}</td>
                         <td>
-                            {% if user.security_profile.manually_locked %}
+                            {% if user.profile.manually_locked %}
                                 <span class="badge text-bg-danger">Locked</span>
                             {% endif %}
-                            {% if user.security_profile.must_reset_password %}
+                            {% if user.profile.must_reset_password %}
                                 <span class="badge text-bg-warning">Reset required</span>
                             {% endif %}
-                            {% if not user.security_profile.manually_locked and not user.security_profile.must_reset_password %}
+                            {% if "email_domain" in user.issues %}
+                                <span class="badge text-bg-dark">Email mismatch</span>
+                            {% endif %}
+                            {% if "password_rotation" in user.issues %}
+                                <span class="badge text-bg-info">Password stale</span>
+                            {% endif %}
+                            {% if user.is_compliant and not user.profile.manually_locked and not user.profile.must_reset_password %}
                                 <span class="badge text-bg-success">Normal</span>
                             {% endif %}
                         </td>
-                        <td>{{ user.security_profile.password_changed_at|date:"M j, Y g:i A"|default:"Not recorded" }}</td>
+                        <td>
+                            {{ user.profile.password_changed_at|date:"M j, Y g:i A"|default:"Not recorded" }}
+                            {% if user.password_age_days is not None %}
+                                <div class="small text-muted">{{ user.password_age_days }} day{{ user.password_age_days|pluralize }} old</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.profile.mfa_enabled %}
+                                <span class="badge text-bg-success">Enabled</span>
+                                {% if user.profile.last_mfa_verified_at %}
+                                    <div class="small text-muted mt-1">Last used {{ user.profile.last_mfa_verified_at|date:"M j, Y g:i A" }}</div>
+                                {% endif %}
+                            {% elif user.user.groups.first.name == "Admin" or user.user.groups.first.name == "Counsellor" or user.user.groups.first.name == "Viewer" %}
+                                <span class="badge text-bg-warning">Not set</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">Optional</span>
+                            {% endif %}
+                        </td>
                         <td>
                             <div class="d-flex flex-wrap gap-2">
                                 <form method="post" class="d-inline">
                                     {% csrf_token %}
-                                    <input type="hidden" name="user_id" value="{{ user.pk }}">
-                                    {% if user.security_profile.manually_locked %}
+                                    <input type="hidden" name="user_id" value="{{ user.user.pk }}">
+                                    {% if user.profile.manually_locked %}
                                         <button class="btn btn-sm btn-outline-success" name="action" value="unlock_user" type="submit">Unlock</button>
                                     {% else %}
                                         <button class="btn btn-sm btn-outline-danger" name="action" value="lock_user" type="submit">Lock</button>
@@ -112,26 +172,33 @@
                                 </form>
                                 <form method="post" class="d-inline">
                                     {% csrf_token %}
-                                    <input type="hidden" name="user_id" value="{{ user.pk }}">
-                                    {% if user.security_profile.must_reset_password %}
+                                    <input type="hidden" name="user_id" value="{{ user.user.pk }}">
+                                    {% if user.profile.must_reset_password %}
                                         <button class="btn btn-sm btn-outline-secondary" name="action" value="clear_reset" type="submit">Clear reset</button>
                                     {% else %}
                                         <button class="btn btn-sm btn-outline-warning" name="action" value="force_reset" type="submit">Force reset</button>
                                     {% endif %}
                                 </form>
+                                {% if user.profile.mfa_enabled %}
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="user_id" value="{{ user.user.pk }}">
+                                        <button class="btn btn-sm btn-outline-dark" name="action" value="reset_mfa" type="submit">Reset MFA</button>
+                                    </form>
+                                {% endif %}
                             </div>
                             <form method="post" class="mt-2">
                                 {% csrf_token %}
-                                <input type="hidden" name="user_id" value="{{ user.pk }}">
+                                <input type="hidden" name="user_id" value="{{ user.user.pk }}">
                                 <input type="hidden" name="action" value="save_note">
-                                <textarea class="form-control form-control-sm" name="security_note" rows="2" placeholder="Security note">{{ user.security_profile.security_note }}</textarea>
+                                <textarea class="form-control form-control-sm" name="security_note" rows="2" placeholder="Security note">{{ user.profile.security_note }}</textarea>
                                 <button class="btn btn-sm btn-outline-primary mt-2" type="submit">Save note</button>
                             </form>
                         </td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="7" class="text-muted text-center py-4">No users found.</td>
+                        <td colspan="8" class="text-muted text-center py-4">No users found.</td>
                     </tr>
                 {% endfor %}
             </tbody>

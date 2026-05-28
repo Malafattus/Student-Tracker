@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 
 
 class TimeStampedModel(models.Model):
@@ -223,6 +224,9 @@ class UserSecurityProfile(TimeStampedModel):
     must_reset_password = models.BooleanField(default=False)
     manually_locked = models.BooleanField(default=False)
     password_changed_at = models.DateTimeField(blank=True, null=True)
+    mfa_enabled = models.BooleanField(default=False)
+    mfa_secret = models.CharField(max_length=64, blank=True)
+    last_mfa_verified_at = models.DateTimeField(blank=True, null=True)
     security_note = models.TextField(blank=True)
 
     class Meta:
@@ -231,12 +235,20 @@ class UserSecurityProfile(TimeStampedModel):
     def __str__(self):
         return f"Security profile for {self.user.get_full_name() or self.user.username}"
 
+    def password_age_days(self):
+        if not self.password_changed_at:
+            return None
+        return (timezone.now() - self.password_changed_at).days
+
 
 class SecurityPolicy(TimeStampedModel):
     require_staff_domain_match = models.BooleanField(default=False)
     allowed_staff_email_domains = models.TextField(blank=True)
+    block_noncompliant_staff_signins = models.BooleanField(default=False)
     require_password_reset_for_new_accounts = models.BooleanField(default=True)
+    require_mfa_for_staff = models.BooleanField(default=False)
     minimum_password_length = models.PositiveSmallIntegerField(default=10)
+    password_rotation_days = models.PositiveSmallIntegerField(default=180)
 
     class Meta:
         verbose_name = "Security policy"
@@ -248,6 +260,14 @@ class SecurityPolicy(TimeStampedModel):
     @property
     def allowed_staff_domains(self):
         return [item.strip().lower() for item in self.allowed_staff_email_domains.split(",") if item.strip()]
+
+    def user_has_allowed_staff_email(self, user):
+        if not self.require_staff_domain_match:
+            return True
+        email = (user.email or "").strip().lower()
+        if "@" not in email:
+            return False
+        return email.split("@")[-1] in self.allowed_staff_domains
 
     @classmethod
     def get_solo(cls):

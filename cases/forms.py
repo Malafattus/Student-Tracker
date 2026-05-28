@@ -790,8 +790,11 @@ class SecurityPolicyForm(forms.ModelForm):
         fields = [
             "require_staff_domain_match",
             "allowed_staff_email_domains",
+            "block_noncompliant_staff_signins",
             "require_password_reset_for_new_accounts",
+            "require_mfa_for_staff",
             "minimum_password_length",
+            "password_rotation_days",
         ]
         widgets = {
             "allowed_staff_email_domains": forms.Textarea(attrs={"rows": 3}),
@@ -801,13 +804,16 @@ class SecurityPolicyForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["allowed_staff_email_domains"].help_text = "Separate multiple allowed domains with commas."
         self.fields["minimum_password_length"].help_text = "Applies to passwords created or changed inside this app."
+        self.fields["block_noncompliant_staff_signins"].help_text = "If turned on, staff who do not match the allowed email rules will be blocked from signing in."
+        self.fields["require_mfa_for_staff"].help_text = "Require staff-style accounts to complete a verification code step at sign-in."
+        self.fields["password_rotation_days"].help_text = "After this many days, staff will be asked to set a fresh password."
         apply_bootstrap_classes(self)
 
 
 class UserSecurityProfileForm(forms.ModelForm):
     class Meta:
         model = UserSecurityProfile
-        fields = ["must_reset_password", "manually_locked", "security_note"]
+        fields = ["must_reset_password", "manually_locked", "mfa_enabled", "security_note"]
         widgets = {
             "security_note": forms.Textarea(attrs={"rows": 3}),
         }
@@ -831,6 +837,25 @@ class RequiredPasswordChangeForm(SetPasswordForm):
         if len(password) < minimum_length:
             raise forms.ValidationError(f"Passwords must be at least {minimum_length} characters long.")
         return cleaned_data
+
+
+class MfaCodeForm(forms.Form):
+    code = forms.CharField(
+        max_length=6,
+        min_length=6,
+        label="Verification code",
+        help_text="Enter the 6-digit code from your authenticator app.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_bootstrap_classes(self)
+
+    def clean_code(self):
+        code = "".join((self.cleaned_data.get("code") or "").split())
+        if not code.isdigit() or len(code) != 6:
+            raise forms.ValidationError("Enter the 6-digit verification code.")
+        return code
 
 
 def apply_bootstrap_classes(form):

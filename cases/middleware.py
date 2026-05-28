@@ -15,6 +15,8 @@ class SessionIdleTimeoutMiddleware:
             getattr(settings, "LOGIN_URL", "/accounts/login/"),
             "/accounts/logout/",
             "/accounts/password-change-required/",
+            "/accounts/mfa/setup/",
+            "/accounts/mfa/challenge/",
         }
         if timeout_seconds and request.user.is_authenticated and request.path not in exempt_paths:
             now = timezone.now().timestamp()
@@ -29,6 +31,10 @@ class SessionIdleTimeoutMiddleware:
             security_profile = getattr(request.user, "security_profile", None)
             if security_profile and security_profile.must_reset_password:
                 return redirect("/accounts/password-change-required/")
+            from .views import mfa_required_for_user
+
+            if mfa_required_for_user(request.user) and (not security_profile or not security_profile.mfa_enabled):
+                return redirect("/accounts/mfa/setup/")
         response = self.get_response(request)
         sensitive_prefixes = (
             "/students/",
