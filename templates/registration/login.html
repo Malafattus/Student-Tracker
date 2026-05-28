@@ -33,6 +33,11 @@
                                 <p class="section-subtitle mb-4">Use your username or email address to open your portal or staff workspace.</p>
                                 <form method="post">
                                     {% csrf_token %}
+                                    {% if messages %}
+                                        {% for message in messages %}
+                                            <div class="alert alert-{{ message.tags|default:'info' }} py-2">{{ message }}</div>
+                                        {% endfor %}
+                                    {% endif %}
                                     <div class="mb-3">
                                         <label class="form-label" for="id_username">Login ID</label>
                                         <input class="form-control" type="text" name="username" id="id_username" required>
