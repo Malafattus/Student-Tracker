@@ -3,7 +3,7 @@
 {% block content %}
 <div class="mb-4">
     <h1 class="h3 mb-1">Admin Tools</h1>
-    <p class="text-muted mb-0">Download database backups and CSV snapshots for safekeeping.</p>
+    <p class="text-muted mb-0">Download backups, review recent security-sensitive activity, and keep a closer eye on how records are being accessed.</p>
 </div>
 <div class="row g-4">
     <div class="col-lg-6">
@@ -21,6 +21,57 @@
                 <h2 class="h5">CSV Export Bundle</h2>
                 <p class="text-muted">Download students, requests, sessions, and tasks in a zip file of CSVs.</p>
                 <a class="btn btn-outline-primary" href="{% url 'download_csv_export' %}">Download CSV bundle</a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row g-4 mt-1">
+    <div class="col-lg-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5">Security snapshot</h2>
+                <div class="small text-muted mb-3">A simple view of the most sensitive recent activity.</div>
+                <div class="stacked-list">
+                    <div class="stacked-list-item">
+                        <div class="fw-semibold">{{ security_summary.downloads }}</div>
+                        <div class="small text-muted">Protected file, backup, or export download{{ security_summary.downloads|pluralize }}</div>
+                    </div>
+                    <div class="stacked-list-item">
+                        <div class="fw-semibold">{{ security_summary.record_views }}</div>
+                        <div class="small text-muted">Sensitive record or portal view{{ security_summary.record_views|pluralize }}</div>
+                    </div>
+                    <div class="stacked-list-item">
+                        <div class="fw-semibold">{{ security_summary.throttled }}</div>
+                        <div class="small text-muted">Blocked public request spike{{ security_summary.throttled|pluralize }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5">Recent security activity</h2>
+                <p class="text-muted">This includes protected downloads, blocked public request bursts, and recent sensitive record access.</p>
+                <div class="list-group list-group-flush">
+                    {% for item in security_logs %}
+                        <div class="list-group-item px-0">
+                            <div class="fw-semibold">{{ item.action|title }} {{ item.object_repr }}</div>
+                            <div class="small text-muted">
+                                {{ item.model_name }}{% if item.actor %} | {{ item.actor.get_full_name|default:item.actor.username }}{% endif %} | {{ item.created_at|date:"M j, Y g:i A" }}
+                            </div>
+                            {% if item.details.section or item.details.ip_address or item.details.email %}
+                                <div class="small text-muted mt-1">
+                                    {% if item.details.section %}{{ item.details.section }}{% endif %}
+                                    {% if item.details.ip_address %}{% if item.details.section %} | {% endif %}IP {{ item.details.ip_address }}{% endif %}
+                                    {% if item.details.email %} | {{ item.details.email }}{% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <div class="text-muted">No recent security activity yet.</div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
     </div>
