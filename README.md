@@ -18,6 +18,7 @@ UIS Student Record System is a Django web app for an international high school c
 - Reports page with weekly, counsellor, case, and overdue follow-up summaries
 - Admin user management page
 - Audit logging for key create, update, and delete actions
+- Security Center with account lockouts, forced password resets, staff email policy, password age review, and MFA controls
 - Seed data command with fake users and students
 
 ## Stage coverage
@@ -295,3 +296,15 @@ The app supports PostgreSQL directly through `DATABASE_URL`. SQLite remains the 
 - Most business rules live in `cases/views.py`, `cases/forms.py`, and `cases/permissions.py`.
 - Email behavior lives in `cases/notifications.py`.
 - Audit log entries are created manually for user-facing actions and automatically for deletes.
+
+## Governance and security operations
+
+This repository now includes operational documentation for safer institutional use:
+
+- [PRODUCTION_SECURITY_BASELINE.md](C:/Users/uistu/Documents/Codex/2026-05-25/build-a-multi-user-student-case/PRODUCTION_SECURITY_BASELINE.md)
+- [PRIVACY_GOVERNANCE_CHECKLIST.md](C:/Users/uistu/Documents/Codex/2026-05-25/build-a-multi-user-student-case/PRIVACY_GOVERNANCE_CHECKLIST.md)
+- [OPERATIONS_RUNBOOK.md](C:/Users/uistu/Documents/Codex/2026-05-25/build-a-multi-user-student-case/OPERATIONS_RUNBOOK.md)
+
+There is also an automated security validation workflow at:
+
+- [.github/workflows/security-validation.yml](C:/Users/uistu/Documents/Codex/2026-05-25/build-a-multi-user-student-case/.github/workflows/security-validation.yml)
