@@ -469,6 +469,7 @@ class CaseTrackerSmokeTests(TestCase):
         setup_response = client.get(reverse("mfa_setup"))
         self.assertEqual(setup_response.status_code, 200)
         self.assertContains(setup_response, "Set up your verification app")
+        self.assertContains(setup_response, "Scan this QR code")
 
     def test_staff_can_complete_mfa_setup_and_finish_sign_in(self):
         policy = SecurityPolicy.get_solo()

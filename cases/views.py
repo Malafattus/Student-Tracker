@@ -73,7 +73,14 @@ from .models import (
     TermCourseEnrollment,
     UserSecurityProfile,
 )
-from .mfa import current_totp_code, format_totp_secret, generate_totp_secret, provisioning_uri, verify_totp_code
+from .mfa import (
+    current_totp_code,
+    format_totp_secret,
+    generate_totp_secret,
+    provisioning_qr_svg_data_uri,
+    provisioning_uri,
+    verify_totp_code,
+)
 from .notifications import (
     send_prepared_report,
     send_request_confirmation,
@@ -2528,6 +2535,7 @@ class MfaSetupView(FormView):
         secret = self.get_setup_secret()
         context["mfa_secret"] = format_totp_secret(secret)
         context["mfa_uri"] = provisioning_uri(secret, user.username, "UIS Student Record System")
+        context["mfa_qr_svg"] = provisioning_qr_svg_data_uri(secret, user.username, "UIS Student Record System")
         context["current_user_obj"] = user
         return context
 
