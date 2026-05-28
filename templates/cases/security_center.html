@@ -7,12 +7,27 @@
 </div>
 <div class="mb-3">
     <a class="btn btn-outline-primary" href="{% url 'security_review_export' %}">Download access review CSV</a>
+    <div class="small text-muted mt-2">Sensitive exports and security changes now ask for a fresh confirmation before they go through.</div>
+</div>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
+            <div>
+                <h2 class="h5 mb-1">Institutional readiness</h2>
+                <div class="text-muted">Track school-managed sign-in, production hosting approval, privacy ownership, and review cadence in one place.</div>
+            </div>
+            <div class="text-end">
+                <div class="small text-muted">Readiness</div>
+                <div class="fw-semibold">{{ governance_readiness.complete_count }} / {{ governance_readiness.total_count }} checks complete</div>
+            </div>
+        </div>
+    </div>
 </div>
 <div class="row g-4">
     <div class="col-lg-5">
         <div class="card shadow-sm h-100">
             <div class="card-header bg-white">
-                <h2 class="h5 mb-0">Account policy</h2>
+                <h2 class="h5 mb-0">Account policy and governance</h2>
             </div>
             <div class="card-body">
                 <form method="post">
@@ -73,6 +88,18 @@
                             <div class="fw-semibold">{% if policy.require_mfa_for_all_accounts %}Required{% else %}Off{% endif %}</div>
                         </div>
                     </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">School-managed staff sign-in</div>
+                            <div class="fw-semibold">{% if policy.require_school_managed_auth_for_staff %}Required{% else %}Not required{% endif %}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">Trusted identity header</div>
+                            <div class="fw-semibold">{% if governance_readiness.checks.school_auth %}Ready{% else %}Not ready{% endif %}</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="mt-3 small text-muted">
                     Allowed staff domains:
@@ -80,6 +107,14 @@
                         {{ policy.allowed_staff_domains|join:", " }}
                     {% else %}
                         No restriction set yet.
+                    {% endif %}
+                </div>
+                <div class="mt-2 small text-muted">
+                    Break-glass local accounts:
+                    {% if policy.break_glass_accounts %}
+                        {{ policy.break_glass_accounts|join:", " }}
+                    {% else %}
+                        None configured.
                     {% endif %}
                 </div>
             </div>
@@ -105,6 +140,58 @@
     </div>
     <div class="col-md-3">
         <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Dormant accounts</div><div class="h3 mb-0">{{ security_overview.dormant_accounts }}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">New sign-in alerts</div><div class="h3 mb-0">{{ security_overview.new_signin_alerts }}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Sessions ended</div><div class="h3 mb-0">{{ security_overview.revoked_sessions }}</div></div></div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Production host approved</div><div class="fw-semibold">{% if governance_readiness.checks.hosting %}Yes{% else %}No{% endif %}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Privacy owner assigned</div><div class="fw-semibold">{% if governance_readiness.checks.privacy_owner %}Yes{% else %}No{% endif %}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Security owner assigned</div><div class="fw-semibold">{% if governance_readiness.checks.security_owner %}Yes{% else %}No{% endif %}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Operations owner assigned</div><div class="fw-semibold">{% if governance_readiness.checks.operations_owner %}Yes{% else %}No{% endif %}</div></div></div>
+    </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+    <div class="card-header bg-white">
+        <h2 class="h5 mb-0">Recent sign-in monitoring</h2>
+    </div>
+    <div class="list-group list-group-flush">
+        {% for item in recent_signins %}
+            <div class="list-group-item">
+                <div class="d-flex flex-wrap justify-content-between gap-2">
+                    <div>
+                        <div class="fw-semibold">
+                            {% if item.action == "new_signin_location" %}
+                                New sign-in location noticed
+                            {% else %}
+                                Successful sign-in
+                            {% endif %}
+                        </div>
+                        <div class="small text-muted">
+                            {% if item.actor %}{{ item.actor.get_full_name|default:item.actor.username }}{% endif %}
+                            {% if item.details.ip_address %} | IP {{ item.details.ip_address }}{% endif %}
+                            {% if item.details.method %} | {{ item.details.method|title }}{% endif %}
+                        </div>
+                    </div>
+                    <div class="small text-muted">{{ item.created_at|date:"M j, Y g:i A" }}</div>
+                </div>
+            </div>
+        {% empty %}
+            <div class="list-group-item text-muted">No recent sign-in activity yet.</div>
+        {% endfor %}
     </div>
 </div>
 
@@ -140,6 +227,9 @@
                         <td>
                             {% if user.profile.manually_locked %}
                                 <span class="badge text-bg-danger">Locked</span>
+                            {% endif %}
+                            {% if user.profile.session_revoked_at %}
+                                <span class="badge text-bg-secondary">Sessions ended</span>
                             {% endif %}
                             {% if user.profile.must_reset_password %}
                                 <span class="badge text-bg-warning">Reset required</span>
@@ -192,6 +282,11 @@
                                     {% else %}
                                         <button class="btn btn-sm btn-outline-danger" name="action" value="lock_user" type="submit">Lock</button>
                                     {% endif %}
+                                </form>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="user_id" value="{{ user.user.pk }}">
+                                    <button class="btn btn-sm btn-outline-secondary" name="action" value="revoke_sessions" type="submit">End access now</button>
                                 </form>
                                 <form method="post" class="d-inline">
                                     {% csrf_token %}
