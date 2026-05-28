@@ -64,7 +64,7 @@ def provisioning_qr_svg_data_uri(secret, username, issuer):
         return None
     uri = provisioning_uri(secret, username, issuer)
     qr = segno.make(uri)
-    buffer = io.StringIO()
+    buffer = io.BytesIO()
     qr.save(buffer, kind="svg", scale=5, border=2, dark="#0f2f57", light="#ffffff")
-    svg_markup = buffer.getvalue()
+    svg_markup = buffer.getvalue().decode("utf-8")
     return f"data:image/svg+xml;utf8,{quote(svg_markup)}"
