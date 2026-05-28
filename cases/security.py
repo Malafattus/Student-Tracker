@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+from django.conf import settings
+
 from django.contrib.auth.models import User
 from django.utils import timezone
 
@@ -47,6 +49,46 @@ def mfa_required_for_user(user, policy=None):
     return is_staff_style_user(user) and policy.require_mfa_for_staff
 
 
+def school_managed_auth_ready(policy=None):
+    policy = policy or SecurityPolicy.get_solo()
+    if not policy.require_school_managed_auth_for_staff:
+        return True
+    return bool(
+        getattr(settings, "TRUSTED_IDENTITY_ENABLED", False)
+        and getattr(settings, "TRUSTED_IDENTITY_EMAIL_HEADER", "")
+    )
+
+
+def local_staff_login_allowed(user, policy=None):
+    policy = policy or SecurityPolicy.get_solo()
+    if not is_staff_style_user(user):
+        return True
+    if not policy.require_school_managed_auth_for_staff:
+        return True
+    return user.username.lower() in policy.break_glass_accounts
+
+
+def governance_readiness(policy=None, now=None):
+    policy = policy or SecurityPolicy.get_solo()
+    now = now or timezone.localdate()
+    checks = {
+        "hosting": bool(policy.approved_hosting_environment.strip()),
+        "privacy_owner": bool(policy.privacy_owner_name.strip() and policy.privacy_owner_email.strip()),
+        "security_owner": bool(policy.security_owner_name.strip() and policy.security_owner_email.strip()),
+        "operations_owner": bool(policy.operations_owner_name.strip() and policy.operations_owner_email.strip()),
+        "privacy_review": bool(policy.last_privacy_review_at),
+        "security_test": bool(policy.last_security_test_at),
+        "operations_review": bool(policy.last_operations_review_at),
+        "school_auth": school_managed_auth_ready(policy=policy),
+    }
+    return {
+        "checks": checks,
+        "complete_count": sum(1 for value in checks.values() if value),
+        "total_count": len(checks),
+        "is_ready": all(checks.values()),
+    }
+
+
 def build_security_review_rows(users=None, policy=None, now=None):
     policy = policy or SecurityPolicy.get_solo()
     now = now or timezone.now()
@@ -75,6 +117,7 @@ def build_security_review_rows(users=None, policy=None, now=None):
                 "dormant_for_review": dormant_for_review,
                 "mfa_required": mfa_required_for_user(user, policy=policy),
                 "role_name": user.groups.first().name if user.groups.exists() else "",
+                "local_staff_login_allowed": local_staff_login_allowed(user, policy=policy),
             }
         )
     return rows

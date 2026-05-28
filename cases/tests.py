@@ -61,6 +61,7 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Academic watchlist")
         self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn("default-src 'self'", response["Content-Security-Policy"])
 
     def test_dashboard_shows_academic_watchlist_and_pending_access_request(self):
         self.student.required_credits = 30
@@ -249,6 +250,22 @@ class CaseTrackerSmokeTests(TestCase):
             AuditLog.objects.filter(model_name="SecurityEvent", action="throttled").exists()
         )
 
+    def test_public_request_blocks_disallowed_attachment_type(self):
+        payload = {
+            "submitted_by_name": "Jamie Student",
+            "submitted_by_email": "jamie@example.com",
+            "student_identifier": "S9999",
+            "request_type": StudentRequest.REQUEST_TRANSCRIPT,
+            "title": "Need official transcript",
+            "details": "Please prepare a transcript for university application.",
+            "preferred_time": "After school",
+            "attachments": [SimpleUploadedFile("malware.exe", b"MZfakebinary", content_type="application/octet-stream")],
+        }
+        response = self.client.post(reverse("student_request_public"), payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "file type is not allowed")
+        self.assertEqual(StudentRequest.objects.count(), 0)
+
     def test_counsellor_can_see_public_student_requests_in_queue(self):
         StudentRequest.objects.create(
             student=self.student,
@@ -384,6 +401,9 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(success_response.status_code, 302)
         response_after_success = self.client.post(reverse("login"), {"username": "admin", "password": "wrong-pass"})
         self.assertEqual(response_after_success.status_code, 200)
+        self.assertTrue(
+            AuditLog.objects.filter(model_name="SecurityEvent", action="login_succeeded", actor=self.admin_user).exists()
+        )
 
     def test_forced_password_reset_redirects_until_completed(self):
         UserSecurityProfile.objects.create(user=self.counsellor, must_reset_password=True)
@@ -412,10 +432,78 @@ class CaseTrackerSmokeTests(TestCase):
     def test_security_review_csv_export_is_available_to_admin(self):
         client = Client()
         client.login(username="admin", password="pass12345")
+        session = client.session
+        session["approved_sensitive_action_target"] = reverse("security_review_export")
+        session[f"sensitive_action_verified_at:{self.admin_user.pk}"] = timezone.now().timestamp()
+        session.save()
         response = client.get(reverse("security_review_export"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "text/csv")
         self.assertIn("Username,Name,Role,Email", response.content.decode("utf-8"))
+
+    def test_sensitive_download_requires_fresh_verification(self):
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        response = client.get(reverse("download_db_backup"))
+        self.assertRedirects(response, reverse("sensitive_action_verify"))
+        verify_response = client.post(
+            reverse("sensitive_action_verify"),
+            {"password": "pass12345", "code": ""},
+        )
+        self.assertRedirects(verify_response, reverse("download_db_backup"), fetch_redirect_response=False)
+        download_response = client.get(reverse("download_db_backup"))
+        self.assertEqual(download_response.status_code, 200)
+        self.assertIn("attachment;", download_response["Content-Disposition"])
+        second_attempt = client.get(reverse("download_db_backup"))
+        self.assertRedirects(second_attempt, reverse("sensitive_action_verify"))
+
+    def test_security_policy_update_requires_fresh_verification(self):
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        policy = SecurityPolicy.get_solo()
+        original = policy.minimum_password_length
+        response = client.post(
+            reverse("security_center"),
+            {
+                "action": "save_policy",
+                "require_staff_domain_match": "",
+                "allowed_staff_email_domains": "",
+                "block_noncompliant_staff_signins": "",
+                "require_password_reset_for_new_accounts": "on",
+                "require_mfa_for_staff": "",
+                "require_mfa_for_all_accounts": "",
+                "minimum_password_length": original + 2,
+                "password_rotation_days": policy.password_rotation_days,
+                "dormant_account_review_days": policy.dormant_account_review_days,
+            },
+        )
+        self.assertRedirects(response, reverse("sensitive_action_verify"))
+        policy.refresh_from_db()
+        self.assertEqual(policy.minimum_password_length, original)
+
+    def test_sensitive_action_verification_uses_mfa_when_enabled(self):
+        client = Client()
+        secret = generate_totp_secret()
+        UserSecurityProfile.objects.create(
+            user=self.admin_user,
+            mfa_enabled=True,
+            mfa_secret=secret,
+            password_changed_at=timezone.now(),
+        )
+        client.login(username="admin", password="pass12345")
+        response = client.get(reverse("security_review_export"))
+        self.assertRedirects(response, reverse("sensitive_action_verify"))
+        invalid_response = client.post(
+            reverse("sensitive_action_verify"),
+            {"password": "pass12345", "code": "000000"},
+        )
+        self.assertEqual(invalid_response.status_code, 200)
+        self.assertContains(invalid_response, "did not match")
+        verify_response = client.post(
+            reverse("sensitive_action_verify"),
+            {"password": "pass12345", "code": current_totp_code(secret)},
+        )
+        self.assertRedirects(verify_response, reverse("security_review_export"))
 
     def test_security_policy_can_restrict_staff_domains(self):
         policy = SecurityPolicy.get_solo()
@@ -454,6 +542,30 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertContains(response, "does not meet the current school access policy")
         self.assertTrue(
             AuditLog.objects.filter(model_name="SecurityEvent", action="login_blocked", details__section="staff_email_restriction").exists()
+        )
+
+    def test_staff_local_login_can_be_disabled_for_school_managed_auth(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_school_managed_auth_for_staff = True
+        policy.save()
+        response = self.client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "must use the school")
+        self.assertTrue(
+            AuditLog.objects.filter(model_name="SecurityEvent", action="login_blocked", details__section="school_managed_auth_required").exists()
+        )
+
+    @override_settings(
+        TRUSTED_IDENTITY_ENABLED=True,
+        TRUSTED_IDENTITY_EMAIL_HEADER="HTTP_X_AUTHENTICATED_EMAIL",
+        TRUSTED_IDENTITY_PROVIDER_NAME="UIS SSO",
+    )
+    def test_trusted_identity_header_can_sign_in_existing_user(self):
+        response = self.client.get(reverse("dashboard"), HTTP_X_AUTHENTICATED_EMAIL="counsellor@example.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Academic watchlist")
+        self.assertTrue(
+            AuditLog.objects.filter(model_name="SecurityEvent", action="trusted_identity_signin", actor=self.counsellor).exists()
         )
 
     def test_stale_staff_password_forces_reset_on_sign_in(self):
@@ -511,6 +623,29 @@ class CaseTrackerSmokeTests(TestCase):
         challenge_response = client.post(reverse("mfa_challenge"), {"code": current_totp_code(secret)})
         self.assertRedirects(challenge_response, reverse("dashboard"))
 
+    @override_settings(MFA_FAILURE_LIMIT=2, MFA_LOCKOUT_SECONDS=900)
+    def test_mfa_challenge_is_throttled_after_repeated_failures(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_mfa_for_staff = True
+        policy.save()
+        secret = generate_totp_secret()
+        UserSecurityProfile.objects.create(
+            user=self.counsellor,
+            mfa_enabled=True,
+            mfa_secret=secret,
+            password_changed_at=timezone.now(),
+        )
+        client = Client()
+        response = client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertRedirects(response, reverse("mfa_challenge"))
+        first = client.post(reverse("mfa_challenge"), {"code": "000000"})
+        self.assertEqual(first.status_code, 200)
+        second = client.post(reverse("mfa_challenge"), {"code": "111111"})
+        self.assertEqual(second.status_code, 200)
+        blocked = client.post(reverse("mfa_challenge"), {"code": current_totp_code(secret)})
+        self.assertEqual(blocked.status_code, 200)
+        self.assertContains(blocked, "Too many verification attempts were made")
+
     def test_mfa_can_be_required_for_student_accounts_too(self):
         policy = SecurityPolicy.get_solo()
         policy.require_mfa_for_all_accounts = True
@@ -536,6 +671,58 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Dormant accounts")
         self.assertContains(response, "Review for dormancy")
+
+    def test_security_center_shows_new_sign_in_alerts(self):
+        client = Client(REMOTE_ADDR="10.0.0.25")
+        response = client.post(reverse("login"), {"username": "admin", "password": "pass12345"})
+        self.assertEqual(response.status_code, 302)
+        response = client.get(reverse("security_center"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "New sign-in alerts")
+        self.assertContains(response, "New sign-in location noticed")
+
+    @override_settings(
+        TRUSTED_IDENTITY_ENABLED=True,
+        TRUSTED_IDENTITY_EMAIL_HEADER="HTTP_X_AUTHENTICATED_EMAIL",
+    )
+    def test_health_ready_reports_governance_and_school_auth_status(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_school_managed_auth_for_staff = True
+        policy.approved_hosting_environment = "Managed school cloud"
+        policy.privacy_owner_name = "Privacy Lead"
+        policy.privacy_owner_email = "privacy@example.com"
+        policy.security_owner_name = "Security Lead"
+        policy.security_owner_email = "security@example.com"
+        policy.operations_owner_name = "Operations Lead"
+        policy.operations_owner_email = "ops@example.com"
+        policy.last_privacy_review_at = timezone.localdate()
+        policy.last_security_test_at = timezone.localdate()
+        policy.last_operations_review_at = timezone.localdate()
+        policy.save()
+        response = self.client.get(reverse("health_ready"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["school_managed_auth_ready"], True)
+        self.assertEqual(response.json()["governance_ready"], True)
+
+    def test_admin_can_end_current_access_for_account(self):
+        admin_client = Client()
+        counsellor_client = Client()
+        admin_client.login(username="admin", password="pass12345")
+        counsellor_client.login(username="counsellor", password="pass12345")
+
+        admin_session = admin_client.session
+        admin_session["approved_sensitive_action_target"] = reverse("security_center")
+        admin_session[f"sensitive_action_verified_at:{self.admin_user.pk}"] = timezone.now().timestamp()
+        admin_session.save()
+
+        response = admin_client.post(
+            reverse("security_center"),
+            {"action": "revoke_sessions", "user_id": self.counsellor.pk},
+        )
+        self.assertRedirects(response, reverse("security_center"))
+
+        protected_response = counsellor_client.get(reverse("dashboard"))
+        self.assertRedirects(protected_response, reverse("login"))
 
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_security_review_digest_command_sends_email(self):

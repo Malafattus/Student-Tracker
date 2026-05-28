@@ -15,6 +15,8 @@ from .views import (
     CsvExportDownloadView,
     DatabaseBackupDownloadView,
     DashboardView,
+    HealthLiveView,
+    HealthReadyView,
     MfaChallengeView,
     MfaSetupView,
     ParentDashboardView,
@@ -31,6 +33,7 @@ from .views import (
     RequiredPasswordChangeView,
     SecurityReviewExportView,
     SecurityCenterView,
+    SensitiveActionVerificationView,
     SessionCreateView,
     SessionListView,
     SessionRescheduleRequestView,
@@ -51,6 +54,8 @@ from .views import (
 )
 
 urlpatterns = [
+    path("health/live/", HealthLiveView.as_view(), name="health_live"),
+    path("health/ready/", HealthReadyView.as_view(), name="health_ready"),
     path("", DashboardView.as_view(), name="dashboard"),
     path("portal/", PortalDashboardView.as_view(), name="portal_dashboard"),
     path("portal/setup-needed/", PortalUnavailableView.as_view(), name="portal_unavailable"),
@@ -100,6 +105,7 @@ urlpatterns = [
     path("admin-tools/download-db/", DatabaseBackupDownloadView.as_view(), name="download_db_backup"),
     path("admin-tools/download-csv/", CsvExportDownloadView.as_view(), name="download_csv_export"),
     path("accounts/password-change-required/", RequiredPasswordChangeView.as_view(), name="password_change_required"),
+    path("accounts/verify-sensitive-action/", SensitiveActionVerificationView.as_view(), name="sensitive_action_verify"),
     path("accounts/mfa/setup/", MfaSetupView.as_view(), name="mfa_setup"),
     path("accounts/mfa/challenge/", MfaChallengeView.as_view(), name="mfa_challenge"),
 ]

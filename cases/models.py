@@ -224,6 +224,7 @@ class UserSecurityProfile(TimeStampedModel):
     must_reset_password = models.BooleanField(default=False)
     manually_locked = models.BooleanField(default=False)
     password_changed_at = models.DateTimeField(blank=True, null=True)
+    session_revoked_at = models.DateTimeField(blank=True, null=True)
     mfa_enabled = models.BooleanField(default=False)
     mfa_secret = models.CharField(max_length=64, blank=True)
     last_mfa_verified_at = models.DateTimeField(blank=True, null=True)
@@ -245,12 +246,24 @@ class SecurityPolicy(TimeStampedModel):
     require_staff_domain_match = models.BooleanField(default=False)
     allowed_staff_email_domains = models.TextField(blank=True)
     block_noncompliant_staff_signins = models.BooleanField(default=False)
+    require_school_managed_auth_for_staff = models.BooleanField(default=False)
+    break_glass_usernames = models.TextField(blank=True)
     require_password_reset_for_new_accounts = models.BooleanField(default=True)
     require_mfa_for_staff = models.BooleanField(default=False)
     require_mfa_for_all_accounts = models.BooleanField(default=False)
     minimum_password_length = models.PositiveSmallIntegerField(default=10)
     password_rotation_days = models.PositiveSmallIntegerField(default=180)
     dormant_account_review_days = models.PositiveSmallIntegerField(default=90)
+    approved_hosting_environment = models.CharField(max_length=255, blank=True)
+    privacy_owner_name = models.CharField(max_length=255, blank=True)
+    privacy_owner_email = models.EmailField(blank=True)
+    security_owner_name = models.CharField(max_length=255, blank=True)
+    security_owner_email = models.EmailField(blank=True)
+    operations_owner_name = models.CharField(max_length=255, blank=True)
+    operations_owner_email = models.EmailField(blank=True)
+    last_privacy_review_at = models.DateField(blank=True, null=True)
+    last_security_test_at = models.DateField(blank=True, null=True)
+    last_operations_review_at = models.DateField(blank=True, null=True)
 
     class Meta:
         verbose_name = "Security policy"
@@ -262,6 +275,10 @@ class SecurityPolicy(TimeStampedModel):
     @property
     def allowed_staff_domains(self):
         return [item.strip().lower() for item in self.allowed_staff_email_domains.split(",") if item.strip()]
+
+    @property
+    def break_glass_accounts(self):
+        return [item.strip().lower() for item in self.break_glass_usernames.split(",") if item.strip()]
 
     def user_has_allowed_staff_email(self, user):
         if not self.require_staff_domain_match:

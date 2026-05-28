@@ -33,6 +33,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'cases.middleware.TrustedIdentityHeaderMiddleware',
     'cases.middleware.SessionIdleTimeoutMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -126,7 +127,24 @@ SECURE_REFERRER_POLICY = "same-origin"
 SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
 LOGIN_FAILURE_LIMIT = int(os.environ.get("DJANGO_LOGIN_FAILURE_LIMIT", "5"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("DJANGO_LOGIN_LOCKOUT_SECONDS", "900"))
+MFA_FAILURE_LIMIT = int(os.environ.get("DJANGO_MFA_FAILURE_LIMIT", "5"))
+MFA_LOCKOUT_SECONDS = int(os.environ.get("DJANGO_MFA_LOCKOUT_SECONDS", "900"))
 SENSITIVE_ACTION_REVERIFY_SECONDS = int(os.environ.get("DJANGO_SENSITIVE_ACTION_REVERIFY_SECONDS", "600"))
+TRUSTED_IDENTITY_ENABLED = os.environ.get("DJANGO_TRUSTED_IDENTITY_ENABLED", "False").lower() == "true"
+TRUSTED_IDENTITY_PROVIDER_NAME = os.environ.get("DJANGO_TRUSTED_IDENTITY_PROVIDER_NAME", "School SSO")
+TRUSTED_IDENTITY_EMAIL_HEADER = os.environ.get("DJANGO_TRUSTED_IDENTITY_EMAIL_HEADER", "HTTP_X_AUTHENTICATED_EMAIL")
+TRUSTED_IDENTITY_NAME_HEADER = os.environ.get("DJANGO_TRUSTED_IDENTITY_NAME_HEADER", "HTTP_X_AUTHENTICATED_NAME")
+MAX_UPLOAD_FILE_SIZE_BYTES = int(os.environ.get("DJANGO_MAX_UPLOAD_FILE_SIZE_BYTES", str(10 * 1024 * 1024)))
+ALLOWED_UPLOAD_EXTENSIONS = [
+    item.strip().lower()
+    for item in os.environ.get("DJANGO_ALLOWED_UPLOAD_EXTENSIONS", ".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png").split(",")
+    if item.strip()
+]
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_IMG_SRC = ("'self'", "data:")
+CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net")
+CSP_FONT_SRC = ("'self'", "data:", "https://cdn.jsdelivr.net")
+CSP_SCRIPT_SRC = ("'self'",)
 
 EMAIL_BACKEND = os.environ.get("DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "noreply@studenttracker.local")

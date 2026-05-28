@@ -5,6 +5,7 @@ from django.contrib.auth.models import Group, User
 from django.db.models import Q
 from django.utils import timezone
 
+from .file_security import validate_uploaded_file
 from .models import (
     AcademicTerm,
     CommunicationLog,
@@ -475,6 +476,12 @@ class StudentRequestPublicForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         apply_bootstrap_classes(self)
 
+    def clean_attachments(self):
+        attachments = self.cleaned_data.get("attachments") or []
+        for attachment in attachments:
+            validate_uploaded_file(attachment)
+        return attachments
+
 
 class StudentPortalRequestForm(forms.ModelForm):
     attachments = MultiFileField(
@@ -499,6 +506,12 @@ class StudentPortalRequestForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         apply_bootstrap_classes(self)
+
+    def clean_attachments(self):
+        attachments = self.cleaned_data.get("attachments") or []
+        for attachment in attachments:
+            validate_uploaded_file(attachment)
+        return attachments
 
 
 class StudentRequestStaffForm(forms.ModelForm):
@@ -647,6 +660,12 @@ class StudentRequestResponseForm(forms.ModelForm):
         if not self.cleaned_data.get("message"):
             self.cleaned_data["message"] = template.body_template
 
+    def clean_attachment(self):
+        attachment = self.cleaned_data.get("attachment")
+        if attachment:
+            validate_uploaded_file(attachment)
+        return attachment
+
     def clean(self):
         cleaned = super().clean()
         template = cleaned.get("template")
@@ -770,6 +789,12 @@ class PreparedReportForm(forms.ModelForm):
             self.fields["student"].initial = student
         apply_bootstrap_classes(self)
 
+    def clean_attachment(self):
+        attachment = self.cleaned_data.get("attachment")
+        if attachment:
+            validate_uploaded_file(attachment)
+        return attachment
+
 
 class CommunicationTemplateForm(forms.ModelForm):
     class Meta:
@@ -791,15 +816,31 @@ class SecurityPolicyForm(forms.ModelForm):
             "require_staff_domain_match",
             "allowed_staff_email_domains",
             "block_noncompliant_staff_signins",
+            "require_school_managed_auth_for_staff",
+            "break_glass_usernames",
             "require_password_reset_for_new_accounts",
             "require_mfa_for_staff",
             "require_mfa_for_all_accounts",
             "minimum_password_length",
             "password_rotation_days",
             "dormant_account_review_days",
+            "approved_hosting_environment",
+            "privacy_owner_name",
+            "privacy_owner_email",
+            "security_owner_name",
+            "security_owner_email",
+            "operations_owner_name",
+            "operations_owner_email",
+            "last_privacy_review_at",
+            "last_security_test_at",
+            "last_operations_review_at",
         ]
         widgets = {
             "allowed_staff_email_domains": forms.Textarea(attrs={"rows": 3}),
+            "break_glass_usernames": forms.Textarea(attrs={"rows": 2}),
+            "last_privacy_review_at": forms.DateInput(attrs={"type": "date"}),
+            "last_security_test_at": forms.DateInput(attrs={"type": "date"}),
+            "last_operations_review_at": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -807,10 +848,16 @@ class SecurityPolicyForm(forms.ModelForm):
         self.fields["allowed_staff_email_domains"].help_text = "Separate multiple allowed domains with commas."
         self.fields["minimum_password_length"].help_text = "Applies to passwords created or changed inside this app."
         self.fields["block_noncompliant_staff_signins"].help_text = "If turned on, staff who do not match the allowed email rules will be blocked from signing in."
+        self.fields["require_school_managed_auth_for_staff"].help_text = "Turn this on when staff must sign in through the school's identity system instead of local passwords."
+        self.fields["break_glass_usernames"].help_text = "Optional emergency local staff accounts that may still sign in directly. Separate multiple usernames with commas."
         self.fields["require_mfa_for_staff"].help_text = "Require staff-style accounts to complete a verification code step at sign-in."
         self.fields["require_mfa_for_all_accounts"].help_text = "Require MFA for students, parents, viewers, counsellors, and admins."
         self.fields["password_rotation_days"].help_text = "After this many days, staff will be asked to set a fresh password."
         self.fields["dormant_account_review_days"].help_text = "Accounts that have not signed in within this many days will be highlighted for review."
+        self.fields["approved_hosting_environment"].help_text = "Record the approved production host, such as a managed cloud or school IT platform."
+        self.fields["last_privacy_review_at"].help_text = "Date of the most recent privacy review for this system."
+        self.fields["last_security_test_at"].help_text = "Date of the most recent formal security test or review."
+        self.fields["last_operations_review_at"].help_text = "Date of the most recent operations or ownership review."
         apply_bootstrap_classes(self)
 
 

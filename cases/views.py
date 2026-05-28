@@ -13,8 +13,9 @@ from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.core.files.base import ContentFile
+from django.db import connection
 from django.db.models import Count, Q
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -22,6 +23,7 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from .audit import log_audit, log_security_event
+from .file_security import validate_uploaded_file
 from .forms import (
     CommunicationTemplateForm,
     CounsellorAccessRequestForm,
@@ -36,6 +38,7 @@ from .forms import (
     RequiredPasswordChangeForm,
     SecurityPolicyForm,
     SessionChangeRequestForm,
+    SensitiveActionVerificationForm,
     ParentPortalAccessForm,
     StudentPortalRequestForm,
     StudentRequestPublicForm,
@@ -103,7 +106,14 @@ from .permissions import (
     is_student,
     require_admin,
 )
-from .security import build_security_review_rows, mfa_required_for_user, user_security_compliance_state
+from .security import (
+    build_security_review_rows,
+    governance_readiness,
+    local_staff_login_allowed,
+    mfa_required_for_user,
+    school_managed_auth_ready,
+    user_security_compliance_state,
+)
 
 
 def current_student_for_user(user):
@@ -160,6 +170,83 @@ def clear_pending_mfa_session(request):
         "pending_mfa_secret",
     ]:
         request.session.pop(key, None)
+
+
+def mark_session_authenticated(request):
+    request.session["auth_completed_at"] = timezone.now().timestamp()
+
+
+def sensitive_action_session_key(user):
+    return f"sensitive_action_verified_at:{user.pk}"
+
+
+def sensitive_action_recently_verified(request):
+    if not request.user.is_authenticated:
+        return False
+    approved_target = request.session.get("approved_sensitive_action_target")
+    verified_at_ts = request.session.get(sensitive_action_session_key(request.user))
+    if not approved_target or not verified_at_ts:
+        return False
+    if approved_target != request.get_full_path():
+        return False
+    if timezone.now().timestamp() - verified_at_ts > settings.SENSITIVE_ACTION_REVERIFY_SECONDS:
+        request.session.pop("approved_sensitive_action_target", None)
+        request.session.pop(sensitive_action_session_key(request.user), None)
+        return False
+    request.session.pop("approved_sensitive_action_target", None)
+    request.session.pop(sensitive_action_session_key(request.user), None)
+    return True
+
+
+def mark_sensitive_action_verified(request, target):
+    request.session["approved_sensitive_action_target"] = target
+    request.session[sensitive_action_session_key(request.user)] = timezone.now().timestamp()
+
+
+def sensitive_action_redirect(request):
+    if request.path == reverse("download_db_backup"):
+        label = "downloading the database backup"
+    elif request.path == reverse("download_csv_export"):
+        label = "downloading the CSV bundle"
+    elif request.path == reverse("security_review_export"):
+        label = "downloading the access review export"
+    elif request.path == reverse("security_center"):
+        label = "saving a security policy or account change"
+    else:
+        label = "this sensitive action"
+    request.session["post_sensitive_action_redirect"] = request.get_full_path()
+    request.session["post_sensitive_action_label"] = label
+    return redirect("sensitive_action_verify")
+
+
+def has_seen_sign_in_ip(user, ip_address):
+    if not ip_address:
+        return False
+    prior_events = AuditLog.objects.filter(actor=user, action="login_succeeded").only("details")[:25]
+    return any((event.details or {}).get("ip_address") == ip_address for event in prior_events)
+
+
+def log_successful_sign_in(request, user, method):
+    ip_address = client_ip_address(request)
+    details = {
+        "section": "sign_in",
+        "ip_address": ip_address,
+        "method": method,
+        "user_id": user.pk,
+    }
+    if not has_seen_sign_in_ip(user, ip_address):
+        log_security_event(
+            "new_signin_location",
+            "New sign-in location",
+            details,
+            actor=user,
+        )
+    log_security_event(
+        "login_succeeded",
+        "Successful sign-in",
+        details,
+        actor=user,
+    )
 
 
 def redirect_portal_user(request):
@@ -249,6 +336,20 @@ class RoleAwareLoginView(auth_views.LoginView):
             )
             messages.error(self.request, "This staff account email does not meet the current school access policy.")
             return self.get(self.request)
+        if not local_staff_login_allowed(form.get_user(), policy=compliance["policy"]):
+            log_security_event(
+                "login_blocked",
+                "Blocked local staff login",
+                {
+                    "section": "school_managed_auth_required",
+                    "login_identifier": self.login_identifier(),
+                    "ip_address": client_ip_address(self.request),
+                    "user_id": form.get_user().pk,
+                },
+                actor=form.get_user(),
+            )
+            messages.error(self.request, "This staff account must use the school's sign-in system.")
+            return self.get(self.request)
         if "password_rotation" in compliance["issues"]:
             security_profile.must_reset_password = True
             security_profile.save(update_fields=["must_reset_password", "updated_at"])
@@ -263,7 +364,10 @@ class RoleAwareLoginView(auth_views.LoginView):
             messages.info(self.request, "Set up multi-factor verification before continuing.")
             return redirect("mfa_setup")
         self.clear_login_failures()
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        mark_session_authenticated(self.request)
+        log_successful_sign_in(self.request, self.request.user, "password")
+        return response
 
     def form_invalid(self, form):
         self.increment_login_failures()
@@ -310,6 +414,7 @@ def save_request_attachments(request_item, uploaded_files, uploaded_by=None):
     for uploaded_file in uploaded_files:
         if not uploaded_file:
             continue
+        validate_uploaded_file(uploaded_file)
         StudentRequestAttachment.objects.create(
             request=request_item,
             uploaded_by=uploaded_by,
@@ -466,6 +571,21 @@ def client_ip_address(request):
 
 def throttle_cache_key(prefix, identifier):
     return f"security:{prefix}:{identifier.casefold() if isinstance(identifier, str) else identifier}"
+
+
+def auth_step_lockout_active(prefix, identifier):
+    key = throttle_cache_key(prefix, identifier)
+    return (cache.get(key) or 0) >= settings.MFA_FAILURE_LIMIT
+
+
+def increment_auth_step_failures(prefix, identifier):
+    key = throttle_cache_key(prefix, identifier)
+    ttl = settings.MFA_LOCKOUT_SECONDS
+    cache.set(key, (cache.get(key) or 0) + 1, ttl)
+
+
+def clear_auth_step_failures(prefix, identifier):
+    cache.delete(throttle_cache_key(prefix, identifier))
 
 
 def build_academic_progress_rows(students):
@@ -2350,6 +2470,32 @@ class UserUpdateView(LoginRequiredMixin, UpdateView):
         return response
 
 
+class HealthLiveView(View):
+    def get(self, request):
+        return JsonResponse({"status": "ok", "service": "uis-student-record-system"})
+
+
+class HealthReadyView(View):
+    def get(self, request):
+        policy = SecurityPolicy.get_solo()
+        governance = governance_readiness(policy=policy)
+        try:
+            connection.ensure_connection()
+            database_ok = True
+        except Exception:
+            database_ok = False
+        return JsonResponse(
+            {
+                "status": "ok" if database_ok else "degraded",
+                "database": database_ok,
+                "school_managed_auth_ready": school_managed_auth_ready(policy=policy),
+                "governance_ready": governance["is_ready"],
+                "governance_checks": governance["checks"],
+            },
+            status=200 if database_ok else 503,
+        )
+
+
 class SecurityCenterView(LoginRequiredMixin, TemplateView):
     template_name = "cases/security_center.html"
 
@@ -2358,6 +2504,8 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        if not sensitive_action_recently_verified(request):
+            return sensitive_action_redirect(request)
         policy = SecurityPolicy.get_solo()
         action = request.POST.get("action")
 
@@ -2374,13 +2522,16 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
         security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
         profile_form = UserSecurityProfileForm(request.POST, instance=security_profile)
 
-        if action in {"lock_user", "unlock_user", "force_reset", "clear_reset", "save_note", "reset_mfa"}:
+        if action in {"lock_user", "unlock_user", "force_reset", "clear_reset", "save_note", "reset_mfa", "revoke_sessions"}:
             if action == "lock_user":
                 security_profile.manually_locked = True
                 message = "Account locked."
             elif action == "unlock_user":
                 security_profile.manually_locked = False
                 message = "Account unlocked."
+            elif action == "revoke_sessions":
+                security_profile.session_revoked_at = timezone.now()
+                message = "Current access ended. The user will need to sign in again."
             elif action == "force_reset":
                 security_profile.must_reset_password = True
                 message = "Password reset required on next sign-in."
@@ -2415,9 +2566,21 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         policy = SecurityPolicy.get_solo()
         security_rows = build_security_review_rows(policy=policy)
+        governance = governance_readiness(policy=policy)
+        recent_signins = AuditLog.objects.filter(
+            model_name="SecurityEvent",
+            action__in=["login_succeeded", "new_signin_location"],
+        ).select_related("actor")[:12]
+        new_signin_alerts = AuditLog.objects.filter(
+            model_name="SecurityEvent",
+            action="new_signin_location",
+            created_at__gte=timezone.now() - timedelta(days=7),
+        ).count()
         context["policy_form"] = kwargs.get("policy_form") or SecurityPolicyForm(instance=policy)
         context["security_users"] = security_rows
         context["policy"] = policy
+        context["recent_signins"] = recent_signins
+        context["governance_readiness"] = governance
         context["security_overview"] = {
             "noncompliant": sum(1 for row in security_rows if not row["is_compliant"]),
             "locked": sum(1 for row in security_rows if row["profile"].manually_locked),
@@ -2425,6 +2588,8 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
             "stale_passwords": sum(1 for row in security_rows if "password_rotation" in row["issues"]),
             "mfa_enabled": sum(1 for row in security_rows if row["profile"].mfa_enabled),
             "dormant_accounts": sum(1 for row in security_rows if row["dormant_for_review"]),
+            "new_signin_alerts": new_signin_alerts,
+            "revoked_sessions": sum(1 for row in security_rows if row["profile"].session_revoked_at),
         }
         return context
 
@@ -2466,6 +2631,17 @@ class MfaSetupView(FormView):
     def dispatch(self, request, *args, **kwargs):
         if not self.current_user():
             return redirect(settings.LOGIN_URL)
+        user = self.current_user()
+        identifier = f"{user.pk}:{client_ip_address(request)}"
+        if request.method.lower() == "post" and auth_step_lockout_active("mfa-setup", identifier):
+            log_security_event(
+                "mfa_locked",
+                "Blocked MFA setup attempt",
+                {"section": "mfa_setup_lockout", "user_id": user.pk, "ip_address": client_ip_address(request)},
+                actor=user,
+            )
+            messages.error(request, "Too many verification attempts were made. Please wait a little and try again.")
+            return self.get(request, *args, **kwargs)
         return super().dispatch(request, *args, **kwargs)
 
     def get_setup_secret(self):
@@ -2492,6 +2668,7 @@ class MfaSetupView(FormView):
         if not verify_totp_code(secret, form.cleaned_data["code"]):
             form.add_error("code", "That verification code does not match. Please try again.")
             return self.form_invalid(form)
+        clear_auth_step_failures("mfa-setup", f"{user.pk}:{client_ip_address(self.request)}")
         security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
         security_profile.mfa_enabled = True
         security_profile.mfa_secret = secret
@@ -2502,9 +2679,15 @@ class MfaSetupView(FormView):
             backend = self.request.session.get("pending_mfa_backend") or "django.contrib.auth.backends.ModelBackend"
             auth_login(self.request, user, backend=backend)
             clear_pending_mfa_session(self.request)
+            mark_session_authenticated(self.request)
+            log_successful_sign_in(self.request, user, "mfa_setup")
         log_audit(user, "updated", user, {"section": "mfa_setup"})
         messages.success(self.request, "Multi-factor verification is now active.")
         return redirect(post_login_destination_for_user(user))
+
+    def form_invalid(self, form):
+        increment_auth_step_failures("mfa-setup", f"{self.current_user().pk}:{client_ip_address(self.request)}")
+        return super().form_invalid(form)
 
 
 class MfaChallengeView(FormView):
@@ -2512,8 +2695,18 @@ class MfaChallengeView(FormView):
     form_class = MfaCodeForm
 
     def dispatch(self, request, *args, **kwargs):
-        if not pending_mfa_user_for_request(request):
+        user = pending_mfa_user_for_request(request)
+        if not user:
             return redirect(settings.LOGIN_URL)
+        if request.method.lower() == "post" and auth_step_lockout_active("mfa-challenge", f"{user.pk}:{client_ip_address(request)}"):
+            log_security_event(
+                "mfa_locked",
+                "Blocked MFA challenge attempt",
+                {"section": "mfa_challenge_lockout", "user_id": user.pk, "ip_address": client_ip_address(request)},
+                actor=user,
+            )
+            messages.error(request, "Too many verification attempts were made. Please wait a little and try again.")
+            return self.get(request, *args, **kwargs)
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
@@ -2525,14 +2718,74 @@ class MfaChallengeView(FormView):
         if not verify_totp_code(security_profile.mfa_secret, form.cleaned_data["code"]):
             form.add_error("code", "That verification code did not match.")
             return self.form_invalid(form)
+        clear_auth_step_failures("mfa-challenge", f"{user.pk}:{client_ip_address(self.request)}")
         security_profile.last_mfa_verified_at = timezone.now()
         security_profile.save(update_fields=["last_mfa_verified_at", "updated_at"])
         backend = self.request.session.get("pending_mfa_backend") or "django.contrib.auth.backends.ModelBackend"
         auth_login(self.request, user, backend=backend)
         clear_pending_mfa_session(self.request)
+        mark_session_authenticated(self.request)
+        log_successful_sign_in(self.request, user, "mfa_challenge")
         log_audit(user, "viewed", user, {"section": "mfa_challenge_completed"})
         messages.success(self.request, "Verification complete.")
         return redirect(post_login_destination_for_user(user))
+
+    def form_invalid(self, form):
+        user = pending_mfa_user_for_request(self.request)
+        if user:
+            increment_auth_step_failures("mfa-challenge", f"{user.pk}:{client_ip_address(self.request)}")
+        return super().form_invalid(form)
+
+
+class SensitiveActionVerificationView(LoginRequiredMixin, FormView):
+    template_name = "registration/sensitive_action_verify.html"
+    form_class = SensitiveActionVerificationForm
+
+    def dispatch(self, request, *args, **kwargs):
+        require_admin(request.user)
+        if request.method.lower() == "post" and auth_step_lockout_active(
+            "sensitive-action", f"{request.user.pk}:{client_ip_address(request)}"
+        ):
+            log_security_event(
+                "sensitive_action_locked",
+                "Blocked sensitive action verification",
+                {"section": "sensitive_action_lockout", "user_id": request.user.pk, "ip_address": client_ip_address(request)},
+                actor=request.user,
+            )
+            messages.error(request, "Too many confirmation attempts were made. Please wait a little and try again.")
+            return self.get(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        security_profile = getattr(self.request.user, "security_profile", None)
+        kwargs["require_mfa"] = bool(security_profile and security_profile.mfa_enabled)
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["target_label"] = self.request.session.get("post_sensitive_action_label") or "this sensitive action"
+        return context
+
+    def form_valid(self, form):
+        security_profile = getattr(self.request.user, "security_profile", None)
+        if security_profile and security_profile.mfa_enabled:
+            if not verify_totp_code(security_profile.mfa_secret, form.cleaned_data.get("code")):
+                form.add_error("code", "That verification code did not match.")
+                return self.form_invalid(form)
+        clear_auth_step_failures("sensitive-action", f"{self.request.user.pk}:{client_ip_address(self.request)}")
+        target = self.request.session.get("post_sensitive_action_redirect") or reverse("security_center")
+        mark_sensitive_action_verified(self.request, target)
+        log_audit(self.request.user, "updated", self.request.user, {"section": "sensitive_action_verify"})
+        messages.success(self.request, "Verification confirmed.")
+        redirect_to = self.request.session.pop("post_sensitive_action_redirect", "")
+        self.request.session.pop("post_sensitive_action_label", None)
+        return redirect(redirect_to or reverse("security_center"))
+
+    def form_invalid(self, form):
+        increment_auth_step_failures("sensitive-action", f"{self.request.user.pk}:{client_ip_address(self.request)}")
+        return super().form_invalid(form)
 
 
 class AdminToolsView(LoginRequiredMixin, TemplateView):
@@ -2561,6 +2814,8 @@ class AdminToolsView(LoginRequiredMixin, TemplateView):
 class DatabaseBackupDownloadView(LoginRequiredMixin, View):
     def get(self, request):
         require_admin(request.user)
+        if not sensitive_action_recently_verified(request):
+            return sensitive_action_redirect(request)
         db_path = settings.BASE_DIR / "db.sqlite3"
         if not db_path.exists():
             raise Http404("Database file not found.")
@@ -2571,6 +2826,8 @@ class DatabaseBackupDownloadView(LoginRequiredMixin, View):
 class SecurityReviewExportView(LoginRequiredMixin, View):
     def get(self, request):
         require_admin(request.user)
+        if not sensitive_action_recently_verified(request):
+            return sensitive_action_redirect(request)
         rows = build_security_review_rows()
         csv_buffer = io.StringIO()
         writer = csv.writer(csv_buffer)
@@ -2620,6 +2877,8 @@ class SecurityReviewExportView(LoginRequiredMixin, View):
 class CsvExportDownloadView(LoginRequiredMixin, View):
     def get(self, request):
         require_admin(request.user)
+        if not sensitive_action_recently_verified(request):
+            return sensitive_action_redirect(request)
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
             self._write_students_csv(archive)
