@@ -64,6 +64,12 @@
                             <div class="fw-semibold">{% if policy.require_mfa_for_staff %}Required{% else %}Optional{% endif %}</div>
                         </div>
                     </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">MFA for everyone</div>
+                            <div class="fw-semibold">{% if policy.require_mfa_for_all_accounts %}Required{% else %}Off{% endif %}</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="mt-3 small text-muted">
                     Allowed staff domains:
@@ -94,6 +100,9 @@
     <div class="col-md-3">
         <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">MFA enabled</div><div class="h3 mb-0">{{ security_overview.mfa_enabled }}</div></div></div>
     </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100"><div class="card-body"><div class="small text-muted mb-1">Dormant accounts</div><div class="h3 mb-0">{{ security_overview.dormant_accounts }}</div></div></div>
+    </div>
 </div>
 
 <div class="card shadow-sm mt-4">
@@ -111,6 +120,7 @@
                     <th>Security status</th>
                     <th>Password updated</th>
                     <th>MFA</th>
+                    <th>Last sign-in</th>
                     <th style="width: 320px;">Actions</th>
                 </tr>
             </thead>
@@ -160,6 +170,16 @@
                             {% endif %}
                         </td>
                         <td>
+                            {% if user.user.last_login %}
+                                {{ user.user.last_login|date:"M j, Y g:i A" }}
+                            {% else %}
+                                <span class="text-muted">Never signed in</span>
+                            {% endif %}
+                            {% if user.dormant_for_review %}
+                                <div class="small text-warning mt-1">Review for dormancy</div>
+                            {% endif %}
+                        </td>
+                        <td>
                             <div class="d-flex flex-wrap gap-2">
                                 <form method="post" class="d-inline">
                                     {% csrf_token %}
@@ -198,7 +218,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="8" class="text-muted text-center py-4">No users found.</td>
+                        <td colspan="9" class="text-muted text-center py-4">No users found.</td>
                     </tr>
                 {% endfor %}
             </tbody>

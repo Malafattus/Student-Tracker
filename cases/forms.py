@@ -793,8 +793,10 @@ class SecurityPolicyForm(forms.ModelForm):
             "block_noncompliant_staff_signins",
             "require_password_reset_for_new_accounts",
             "require_mfa_for_staff",
+            "require_mfa_for_all_accounts",
             "minimum_password_length",
             "password_rotation_days",
+            "dormant_account_review_days",
         ]
         widgets = {
             "allowed_staff_email_domains": forms.Textarea(attrs={"rows": 3}),
@@ -806,7 +808,9 @@ class SecurityPolicyForm(forms.ModelForm):
         self.fields["minimum_password_length"].help_text = "Applies to passwords created or changed inside this app."
         self.fields["block_noncompliant_staff_signins"].help_text = "If turned on, staff who do not match the allowed email rules will be blocked from signing in."
         self.fields["require_mfa_for_staff"].help_text = "Require staff-style accounts to complete a verification code step at sign-in."
+        self.fields["require_mfa_for_all_accounts"].help_text = "Require MFA for students, parents, viewers, counsellors, and admins."
         self.fields["password_rotation_days"].help_text = "After this many days, staff will be asked to set a fresh password."
+        self.fields["dormant_account_review_days"].help_text = "Accounts that have not signed in within this many days will be highlighted for review."
         apply_bootstrap_classes(self)
 
 
