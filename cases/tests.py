@@ -30,6 +30,7 @@ from .models import (
     TermCourseEnrollment,
     UserSecurityProfile,
 )
+from .mfa import current_totp_code, generate_totp_secret
 from .permissions import ROLE_ADMIN, ROLE_COUNSELLOR, ROLE_PARENT, ROLE_STUDENT, ensure_roles
 
 
@@ -405,6 +406,7 @@ class CaseTrackerSmokeTests(TestCase):
         response = client.get(reverse("security_center"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Security Center")
+        self.assertContains(response, "Non-compliant accounts")
 
     def test_security_policy_can_restrict_staff_domains(self):
         policy = SecurityPolicy.get_solo()
@@ -429,6 +431,75 @@ class CaseTrackerSmokeTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "This email domain is not allowed for staff accounts.")
+
+    def test_noncompliant_staff_email_can_be_blocked_at_sign_in(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_staff_domain_match = True
+        policy.allowed_staff_email_domains = "uis.edu"
+        policy.block_noncompliant_staff_signins = True
+        policy.save()
+        self.counsellor.email = "counsellor@gmail.com"
+        self.counsellor.save(update_fields=["email"])
+        response = self.client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "does not meet the current school access policy")
+        self.assertTrue(
+            AuditLog.objects.filter(model_name="SecurityEvent", action="login_blocked", details__section="staff_email_restriction").exists()
+        )
+
+    def test_stale_staff_password_forces_reset_on_sign_in(self):
+        policy = SecurityPolicy.get_solo()
+        policy.password_rotation_days = 30
+        policy.save()
+        profile, _ = UserSecurityProfile.objects.get_or_create(user=self.counsellor)
+        profile.password_changed_at = timezone.now() - timedelta(days=45)
+        profile.save(update_fields=["password_changed_at", "updated_at"])
+        response = self.client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertRedirects(response, reverse("password_change_required"))
+        profile.refresh_from_db()
+        self.assertTrue(profile.must_reset_password)
+
+    def test_staff_mfa_setup_is_required_when_policy_is_on(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_mfa_for_staff = True
+        policy.save()
+        client = Client()
+        response = client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertRedirects(response, reverse("mfa_setup"))
+        setup_response = client.get(reverse("mfa_setup"))
+        self.assertEqual(setup_response.status_code, 200)
+        self.assertContains(setup_response, "Set up your verification app")
+
+    def test_staff_can_complete_mfa_setup_and_finish_sign_in(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_mfa_for_staff = True
+        policy.save()
+        client = Client()
+        response = client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertRedirects(response, reverse("mfa_setup"))
+        secret = client.session["pending_mfa_secret"]
+        verify_response = client.post(reverse("mfa_setup"), {"code": current_totp_code(secret)})
+        self.assertRedirects(verify_response, reverse("dashboard"))
+        profile = self.counsellor.security_profile
+        self.assertTrue(profile.mfa_enabled)
+        self.assertTrue(profile.mfa_secret)
+
+    def test_existing_staff_mfa_prompts_for_code_on_next_sign_in(self):
+        policy = SecurityPolicy.get_solo()
+        policy.require_mfa_for_staff = True
+        policy.save()
+        secret = generate_totp_secret()
+        UserSecurityProfile.objects.create(
+            user=self.counsellor,
+            mfa_enabled=True,
+            mfa_secret=secret,
+            password_changed_at=timezone.now(),
+        )
+        client = Client()
+        response = client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertRedirects(response, reverse("mfa_challenge"))
+        challenge_response = client.post(reverse("mfa_challenge"), {"code": current_totp_code(secret)})
+        self.assertRedirects(challenge_response, reverse("dashboard"))
 
     def test_student_portal_redirect_and_dashboard(self):
         portal_user = User.objects.create_user("student1", email="student1@example.com", password="pass12345")

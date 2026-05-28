@@ -15,6 +15,8 @@ from .views import (
     CsvExportDownloadView,
     DatabaseBackupDownloadView,
     DashboardView,
+    MfaChallengeView,
+    MfaSetupView,
     ParentDashboardView,
     ParentPortalAccessUpdateView,
     ParentUnavailableView,
@@ -96,4 +98,6 @@ urlpatterns = [
     path("admin-tools/download-db/", DatabaseBackupDownloadView.as_view(), name="download_db_backup"),
     path("admin-tools/download-csv/", CsvExportDownloadView.as_view(), name="download_csv_export"),
     path("accounts/password-change-required/", RequiredPasswordChangeView.as_view(), name="password_change_required"),
+    path("accounts/mfa/setup/", MfaSetupView.as_view(), name="mfa_setup"),
+    path("accounts/mfa/challenge/", MfaChallengeView.as_view(), name="mfa_challenge"),
 ]

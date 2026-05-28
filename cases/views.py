@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import login as auth_login
 from django.contrib.auth import views as auth_views
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.models import User
@@ -30,6 +31,7 @@ from .forms import (
     DocumentRequirementForm,
     FollowUpTaskForm,
     LoginIDAuthenticationForm,
+    MfaCodeForm,
     RequestTaskForm,
     RequiredPasswordChangeForm,
     SecurityPolicyForm,
@@ -71,6 +73,7 @@ from .models import (
     TermCourseEnrollment,
     UserSecurityProfile,
 )
+from .mfa import current_totp_code, format_totp_secret, generate_totp_secret, provisioning_uri, verify_totp_code
 from .notifications import (
     send_prepared_report,
     send_request_confirmation,
@@ -117,6 +120,75 @@ def redirect_parent_to_portal(request):
     if is_parent(request.user):
         return redirect("parent_unavailable")
     return None
+
+
+def is_staff_style_user(user):
+    return bool(
+        user
+        and user.is_authenticated
+        and (is_admin(user) or is_counsellor(user) or user.groups.filter(name="Viewer").exists())
+    )
+
+
+def user_security_compliance_state(user):
+    policy = SecurityPolicy.get_solo()
+    security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
+    issues = []
+
+    if is_staff_style_user(user) and policy.require_staff_domain_match and not policy.user_has_allowed_staff_email(user):
+        issues.append("email_domain")
+    password_age_days = security_profile.password_age_days()
+    if (
+        is_staff_style_user(user)
+        and policy.password_rotation_days
+        and security_profile.password_changed_at is not None
+        and password_age_days is not None
+        and password_age_days >= policy.password_rotation_days
+    ):
+        issues.append("password_rotation")
+    return {
+        "policy": policy,
+        "security_profile": security_profile,
+        "issues": issues,
+        "password_age_days": password_age_days,
+        "is_compliant": not issues,
+    }
+
+
+def mfa_required_for_user(user):
+    return is_staff_style_user(user) and SecurityPolicy.get_solo().require_mfa_for_staff
+
+
+def post_login_destination_for_user(user):
+    security_profile = getattr(user, "security_profile", None)
+    if security_profile and security_profile.must_reset_password:
+        return reverse("password_change_required")
+    student = current_student_for_user(user)
+    if student:
+        return reverse("portal_dashboard")
+    if has_active_parent_portal(user):
+        return reverse("parent_dashboard")
+    if is_parent(user):
+        return reverse("parent_unavailable")
+    if is_student(user):
+        return reverse("portal_unavailable")
+    return reverse("dashboard")
+
+
+def pending_mfa_user_for_request(request):
+    user_id = request.session.get("pending_mfa_user_id")
+    if not user_id:
+        return None
+    return User.objects.filter(pk=user_id).first()
+
+
+def clear_pending_mfa_session(request):
+    for key in [
+        "pending_mfa_user_id",
+        "pending_mfa_backend",
+        "pending_mfa_secret",
+    ]:
+        request.session.pop(key, None)
 
 
 def redirect_portal_user(request):
@@ -173,22 +245,11 @@ class RoleAwareLoginView(auth_views.LoginView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
-        security_profile = getattr(self.request.user, "security_profile", None)
-        if security_profile and security_profile.must_reset_password:
-            return reverse("password_change_required")
-        student = current_student_for_user(self.request.user)
-        if student:
-            return reverse("portal_dashboard")
-        if has_active_parent_portal(self.request.user):
-            return reverse("parent_dashboard")
-        if is_parent(self.request.user):
-            return reverse("parent_unavailable")
-        if is_student(self.request.user):
-            return reverse("portal_unavailable")
-        return super().get_success_url()
+        return post_login_destination_for_user(self.request.user)
 
     def form_valid(self, form):
-        security_profile = getattr(form.get_user(), "security_profile", None)
+        compliance = user_security_compliance_state(form.get_user())
+        security_profile = compliance["security_profile"]
         if security_profile and security_profile.manually_locked:
             log_security_event(
                 "login_blocked",
@@ -203,6 +264,33 @@ class RoleAwareLoginView(auth_views.LoginView):
             )
             messages.error(self.request, "This account has been locked. Please contact an administrator.")
             return self.get(self.request)
+        if "email_domain" in compliance["issues"] and compliance["policy"].block_noncompliant_staff_signins:
+            log_security_event(
+                "login_blocked",
+                "Blocked login for non-compliant staff email",
+                {
+                    "section": "staff_email_restriction",
+                    "login_identifier": self.login_identifier(),
+                    "ip_address": client_ip_address(self.request),
+                    "user_id": form.get_user().pk,
+                },
+                actor=form.get_user(),
+            )
+            messages.error(self.request, "This staff account email does not meet the current school access policy.")
+            return self.get(self.request)
+        if "password_rotation" in compliance["issues"]:
+            security_profile.must_reset_password = True
+            security_profile.save(update_fields=["must_reset_password", "updated_at"])
+        if mfa_required_for_user(form.get_user()):
+            self.clear_login_failures()
+            self.request.session["pending_mfa_user_id"] = form.get_user().pk
+            self.request.session["pending_mfa_backend"] = getattr(form.get_user(), "backend", "")
+            if security_profile.mfa_enabled and security_profile.mfa_secret:
+                messages.info(self.request, "Enter your verification code to finish signing in.")
+                return redirect("mfa_challenge")
+            self.request.session["pending_mfa_secret"] = generate_totp_secret()
+            messages.info(self.request, "Set up multi-factor verification before continuing.")
+            return redirect("mfa_setup")
         self.clear_login_failures()
         return super().form_valid(form)
 
@@ -2315,7 +2403,7 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
         security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
         profile_form = UserSecurityProfileForm(request.POST, instance=security_profile)
 
-        if action in {"lock_user", "unlock_user", "force_reset", "clear_reset", "save_note"}:
+        if action in {"lock_user", "unlock_user", "force_reset", "clear_reset", "save_note", "reset_mfa"}:
             if action == "lock_user":
                 security_profile.manually_locked = True
                 message = "Account locked."
@@ -2328,6 +2416,11 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
             elif action == "clear_reset":
                 security_profile.must_reset_password = False
                 message = "Forced password reset cleared."
+            elif action == "reset_mfa":
+                security_profile.mfa_enabled = False
+                security_profile.mfa_secret = ""
+                security_profile.last_mfa_verified_at = None
+                message = "MFA setup cleared. The user will need to set it up again."
             else:
                 if profile_form.is_valid():
                     security_profile.security_note = profile_form.cleaned_data["security_note"]
@@ -2357,9 +2450,28 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
         )
         for user in users:
             UserSecurityProfile.objects.get_or_create(user=user)
+        security_rows = []
+        for user in users:
+            compliance = user_security_compliance_state(user)
+            security_rows.append(
+                {
+                    "user": user,
+                    "profile": compliance["security_profile"],
+                    "issues": compliance["issues"],
+                    "password_age_days": compliance["password_age_days"],
+                    "is_compliant": compliance["is_compliant"],
+                }
+            )
         context["policy_form"] = kwargs.get("policy_form") or SecurityPolicyForm(instance=policy)
-        context["security_users"] = users
+        context["security_users"] = security_rows
         context["policy"] = policy
+        context["security_overview"] = {
+            "noncompliant": sum(1 for row in security_rows if not row["is_compliant"]),
+            "locked": sum(1 for row in security_rows if row["profile"].manually_locked),
+            "reset_required": sum(1 for row in security_rows if row["profile"].must_reset_password),
+            "stale_passwords": sum(1 for row in security_rows if "password_rotation" in row["issues"]),
+            "mfa_enabled": sum(1 for row in security_rows if row["profile"].mfa_enabled),
+        }
         return context
 
 
@@ -2388,6 +2500,84 @@ class RequiredPasswordChangeView(LoginRequiredMixin, FormView):
         log_audit(self.request.user, "updated", self.request.user, {"section": "required_password_change"})
         messages.success(self.request, "Password updated successfully.")
         return super().form_valid(form)
+
+
+class MfaSetupView(FormView):
+    template_name = "registration/mfa_setup.html"
+    form_class = MfaCodeForm
+
+    def current_user(self):
+        return self.request.user if self.request.user.is_authenticated else pending_mfa_user_for_request(self.request)
+
+    def dispatch(self, request, *args, **kwargs):
+        if not self.current_user():
+            return redirect(settings.LOGIN_URL)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_setup_secret(self):
+        existing = self.request.session.get("pending_mfa_secret")
+        if existing:
+            return existing
+        generated = generate_totp_secret()
+        self.request.session["pending_mfa_secret"] = generated
+        return generated
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.current_user()
+        secret = self.get_setup_secret()
+        context["mfa_secret"] = format_totp_secret(secret)
+        context["mfa_uri"] = provisioning_uri(secret, user.username, "UIS Student Record System")
+        context["current_user_obj"] = user
+        return context
+
+    def form_valid(self, form):
+        user = self.current_user()
+        secret = self.get_setup_secret()
+        if not verify_totp_code(secret, form.cleaned_data["code"]):
+            form.add_error("code", "That verification code does not match. Please try again.")
+            return self.form_invalid(form)
+        security_profile, _ = UserSecurityProfile.objects.get_or_create(user=user)
+        security_profile.mfa_enabled = True
+        security_profile.mfa_secret = secret
+        security_profile.last_mfa_verified_at = timezone.now()
+        security_profile.save()
+        self.request.session.pop("pending_mfa_secret", None)
+        if not self.request.user.is_authenticated:
+            backend = self.request.session.get("pending_mfa_backend") or "django.contrib.auth.backends.ModelBackend"
+            auth_login(self.request, user, backend=backend)
+            clear_pending_mfa_session(self.request)
+        log_audit(user, "updated", user, {"section": "mfa_setup"})
+        messages.success(self.request, "Multi-factor verification is now active.")
+        return redirect(post_login_destination_for_user(user))
+
+
+class MfaChallengeView(FormView):
+    template_name = "registration/mfa_challenge.html"
+    form_class = MfaCodeForm
+
+    def dispatch(self, request, *args, **kwargs):
+        if not pending_mfa_user_for_request(request):
+            return redirect(settings.LOGIN_URL)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        user = pending_mfa_user_for_request(self.request)
+        security_profile = getattr(user, "security_profile", None)
+        if not security_profile or not security_profile.mfa_enabled or not security_profile.mfa_secret:
+            messages.info(self.request, "Finish setting up multi-factor verification first.")
+            return redirect("mfa_setup")
+        if not verify_totp_code(security_profile.mfa_secret, form.cleaned_data["code"]):
+            form.add_error("code", "That verification code did not match.")
+            return self.form_invalid(form)
+        security_profile.last_mfa_verified_at = timezone.now()
+        security_profile.save(update_fields=["last_mfa_verified_at", "updated_at"])
+        backend = self.request.session.get("pending_mfa_backend") or "django.contrib.auth.backends.ModelBackend"
+        auth_login(self.request, user, backend=backend)
+        clear_pending_mfa_session(self.request)
+        log_audit(user, "viewed", user, {"section": "mfa_challenge_completed"})
+        messages.success(self.request, "Verification complete.")
+        return redirect(post_login_destination_for_user(user))
 
 
 class AdminToolsView(LoginRequiredMixin, TemplateView):
