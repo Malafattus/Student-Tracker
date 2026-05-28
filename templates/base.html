@@ -12,7 +12,7 @@
         <div class="container-fluid">
             <a class="navbar-brand fw-semibold" href="{% if role_flags.is_student_portal %}{% url 'portal_dashboard' %}{% elif role_flags.is_parent_portal %}{% url 'parent_dashboard' %}{% elif request.user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'student_request_public' %}{% endif %}">UIS Student Record System</a>
             {% if request.user.is_authenticated %}
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
+                <button class="navbar-toggler" type="button" data-nav-toggle="collapse" data-nav-target="#navMenu" aria-controls="navMenu" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <div class="collapse navbar-collapse" id="navMenu">
@@ -29,7 +29,7 @@
                         {% else %}
                             <li class="nav-item"><a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a></li>
                             <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">People</a>
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-nav-toggle="dropdown" aria-expanded="false">People</a>
                                 <ul class="dropdown-menu dropdown-menu-dark nav-dropdown-menu">
                                     <li><a class="dropdown-item" href="{% url 'student_list' %}">Students</a></li>
                                     {% if role_flags.is_admin or role_flags.is_counsellor %}
@@ -42,7 +42,7 @@
                                 </ul>
                             </li>
                             <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Operations</a>
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-nav-toggle="dropdown" aria-expanded="false">Operations</a>
                                 <ul class="dropdown-menu dropdown-menu-dark nav-dropdown-menu">
                                     <li><a class="dropdown-item" href="{% url 'request_list' %}">Requests</a></li>
                                     <li><a class="dropdown-item" href="{% url 'session_list' %}">Sessions</a></li>
@@ -51,7 +51,7 @@
                                 </ul>
                             </li>
                             <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Updates</a>
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-nav-toggle="dropdown" aria-expanded="false">Updates</a>
                                 <ul class="dropdown-menu dropdown-menu-dark nav-dropdown-menu">
                                     <li><a class="dropdown-item" href="{% url 'communication_center' %}">Communications</a></li>
                                     <li><a class="dropdown-item" href="{% url 'reports' %}">Reports</a></li>
@@ -59,7 +59,7 @@
                             </li>
                             {% if role_flags.is_admin %}
                                 <li class="nav-item dropdown">
-                                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
+                                    <a class="nav-link dropdown-toggle" href="#" role="button" data-nav-toggle="dropdown" aria-expanded="false">Admin</a>
                                     <ul class="dropdown-menu dropdown-menu-dark nav-dropdown-menu">
                                         <li><a class="dropdown-item" href="{% url 'security_center' %}">Security Center</a></li>
                                         <li><a class="dropdown-item" href="{% url 'admin_tools' %}">Admin Tools</a></li>
@@ -95,6 +95,6 @@
         {% endif %}
         {% block content %}{% endblock %}
     </main>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/app.js"></script>
 </body>
 </html>
