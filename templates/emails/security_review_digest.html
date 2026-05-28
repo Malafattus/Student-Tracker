@@ -1,0 +1,32 @@
+<h2>Security review summary</h2>
+<ul>
+    <li>Non-compliant accounts: {{ summary.noncompliant }}</li>
+    <li>Locked accounts: {{ summary.locked }}</li>
+    <li>Reset required: {{ summary.reset_required }}</li>
+    <li>Stale passwords: {{ summary.stale_passwords }}</li>
+    <li>MFA enabled: {{ summary.mfa_enabled }}</li>
+    <li>Dormant accounts: {{ summary.dormant_accounts }}</li>
+</ul>
+
+<h3>Accounts needing the most attention</h3>
+<ul>
+    {% for row in rows %}
+        <li>
+            <strong>{{ row.user.get_full_name|default:row.user.username }}</strong>
+            ({{ row.role_name|default:"No role" }})
+            <ul>
+                {% if row.issues %}
+                    <li>Issues: {{ row.issues|join:", " }}</li>
+                {% endif %}
+                {% if row.dormant_for_review %}
+                    <li>Dormant for review</li>
+                {% endif %}
+                {% if row.mfa_required and not row.profile.mfa_enabled %}
+                    <li>MFA not set up</li>
+                {% endif %}
+            </ul>
+        </li>
+    {% empty %}
+        <li>No high-risk accounts right now.</li>
+    {% endfor %}
+</ul>

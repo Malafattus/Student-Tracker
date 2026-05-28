@@ -862,6 +862,43 @@ class MfaCodeForm(forms.Form):
         return code
 
 
+class SensitiveActionVerificationForm(forms.Form):
+    password = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        help_text="Enter your current password to continue.",
+    )
+    code = forms.CharField(
+        max_length=6,
+        min_length=6,
+        required=False,
+        label="Verification code",
+        help_text="If your account uses multi-factor verification, enter the current 6-digit code.",
+    )
+
+    def __init__(self, *args, user=None, require_mfa=False, **kwargs):
+        self.user = user
+        self.require_mfa = require_mfa
+        super().__init__(*args, **kwargs)
+        if not require_mfa:
+            self.fields["code"].widget = forms.HiddenInput()
+            self.fields["code"].required = False
+            self.fields["code"].help_text = ""
+        apply_bootstrap_classes(self)
+
+    def clean_password(self):
+        password = self.cleaned_data.get("password")
+        if not self.user or not self.user.check_password(password):
+            raise forms.ValidationError("That password did not match your account.")
+        return password
+
+    def clean_code(self):
+        code = "".join((self.cleaned_data.get("code") or "").split())
+        if self.require_mfa:
+            if not code.isdigit() or len(code) != 6:
+                raise forms.ValidationError("Enter the 6-digit verification code.")
+        return code
+
+
 def apply_bootstrap_classes(form):
     for field in form.fields.values():
         existing = field.widget.attrs.get("class", "")

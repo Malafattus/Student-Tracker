@@ -1,0 +1,18 @@
+Security review summary
+
+Non-compliant accounts: {{ summary.noncompliant }}
+Locked accounts: {{ summary.locked }}
+Reset required: {{ summary.reset_required }}
+Stale passwords: {{ summary.stale_passwords }}
+MFA enabled: {{ summary.mfa_enabled }}
+Dormant accounts: {{ summary.dormant_accounts }}
+
+Accounts needing the most attention:
+{% for row in rows %}
+- {{ row.user.get_full_name|default:row.user.username }} ({{ row.role_name|default:"No role" }})
+  {% if row.issues %}Issues: {{ row.issues|join:", " }}{% endif %}
+  {% if row.dormant_for_review %}{% if row.issues %}; {% endif %}Dormant for review{% endif %}
+  {% if row.mfa_required and not row.profile.mfa_enabled %}{% if row.issues or row.dormant_for_review %}; {% endif %}MFA not set up{% endif %}
+{% empty %}
+- No high-risk accounts right now.
+{% endfor %}
