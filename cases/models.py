@@ -7,6 +7,8 @@ from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 
+from .file_security import file_sha256, file_size_bytes
+
 
 class TimeStampedModel(models.Model):
     """Shared timestamps for the main operational records."""
@@ -789,12 +791,23 @@ class StudentRequestAttachment(TimeStampedModel):
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     original_name = models.CharField(max_length=255)
     file = models.FileField(upload_to=request_attachment_upload_to)
+    file_sha256 = models.CharField(max_length=64, blank=True)
+    file_size = models.PositiveBigIntegerField(default=0)
 
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
         return self.original_name
+
+    def save(self, *args, **kwargs):
+        if self.file:
+            self.file_sha256 = file_sha256(self.file)
+            self.file_size = file_size_bytes(self.file)
+        else:
+            self.file_sha256 = ""
+            self.file_size = 0
+        super().save(*args, **kwargs)
 
 
 class StudentRequestResponse(TimeStampedModel):
@@ -804,6 +817,8 @@ class StudentRequestResponse(TimeStampedModel):
     message = models.TextField()
     recipient_email = models.EmailField()
     attachment = models.FileField(upload_to=request_response_upload_to, blank=True)
+    attachment_sha256 = models.CharField(max_length=64, blank=True)
+    attachment_size = models.PositiveBigIntegerField(default=0)
     mark_complete = models.BooleanField(default=True)
     send_requested_at = models.DateTimeField(blank=True, null=True)
     sent_at = models.DateTimeField(blank=True, null=True)
@@ -814,6 +829,15 @@ class StudentRequestResponse(TimeStampedModel):
 
     def __str__(self):
         return f"Response to {self.request}"
+
+    def save(self, *args, **kwargs):
+        if self.attachment:
+            self.attachment_sha256 = file_sha256(self.attachment)
+            self.attachment_size = file_size_bytes(self.attachment)
+        else:
+            self.attachment_sha256 = ""
+            self.attachment_size = 0
+        super().save(*args, **kwargs)
 
 
 class CommunicationTemplate(TimeStampedModel):
@@ -864,6 +888,8 @@ class PreparedReport(TimeStampedModel):
     counselling_update = models.TextField(blank=True)
     recommendations = models.TextField(blank=True)
     attachment = models.FileField(upload_to=prepared_report_upload_to, blank=True)
+    attachment_sha256 = models.CharField(max_length=64, blank=True)
+    attachment_size = models.PositiveBigIntegerField(default=0)
     send_requested_at = models.DateTimeField(blank=True, null=True)
     sent_at = models.DateTimeField(blank=True, null=True)
     send_error = models.TextField(blank=True)
@@ -882,6 +908,15 @@ class PreparedReport(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        if self.attachment:
+            self.attachment_sha256 = file_sha256(self.attachment)
+            self.attachment_size = file_size_bytes(self.attachment)
+        else:
+            self.attachment_sha256 = ""
+            self.attachment_size = 0
+        super().save(*args, **kwargs)
 
 
 class StudentPortalAccess(TimeStampedModel):

@@ -1134,6 +1134,34 @@ class CaseTrackerSmokeTests(TestCase):
             AuditLog.objects.filter(action="downloaded", details__section="prepared_report_attachment").exists()
         )
 
+    def test_tampered_attachment_download_is_blocked(self):
+        request_item = StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_DOCUMENT,
+            title="Need supporting file",
+            details="Please review this upload.",
+        )
+        attachment = request_item.attachments.create(
+            original_name="proof.pdf",
+            file=SimpleUploadedFile("proof.pdf", b"original-file", content_type="application/pdf"),
+        )
+        with open(attachment.file.path, "wb") as handle:
+            handle.write(b"changed-file")
+
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("request_attachment_download", args=[attachment.pk]), follow=True)
+
+        self.assertRedirects(response, reverse("dashboard"))
+        self.assertContains(response, "no longer matches the original upload")
+        self.assertTrue(
+            AuditLog.objects.filter(model_name="SecurityEvent", action="file_integrity_failed").exists()
+        )
+
     @override_settings(SESSION_IDLE_TIMEOUT_SECONDS=1)
     def test_idle_session_timeout_logs_user_out(self):
         client = Client()

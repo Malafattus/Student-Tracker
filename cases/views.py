@@ -23,7 +23,7 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from .audit import log_audit, log_security_event
-from .file_security import validate_uploaded_file
+from .file_security import file_integrity_matches, validate_uploaded_file
 from .forms import (
     CommunicationTemplateForm,
     CounsellorAccessRequestForm,
@@ -574,6 +574,26 @@ def file_response_for_field(file_field, download_name):
     if not file_field:
         raise Http404("File not found.")
     file_field.open("rb")
+    return FileResponse(file_field, as_attachment=False, filename=download_name)
+
+
+def verified_file_response(request, *, file_field, download_name, audit_object, section, expected_sha256="", expected_size=0, extra_details=None):
+    if not file_field:
+        raise Http404("File not found.")
+    file_field.open("rb")
+    if not file_integrity_matches(file_field, expected_sha256, expected_size):
+        details = {"section": section, "file_name": download_name}
+        if extra_details:
+            details.update(extra_details)
+        log_security_event(
+            "file_integrity_failed",
+            "Blocked file download because the stored file no longer matched its recorded fingerprint",
+            details,
+            actor=request.user,
+        )
+        messages.error(request, "This file could not be opened because its stored copy no longer matches the original upload.")
+        return redirect("dashboard")
+    log_audit(request.user, "downloaded", audit_object, {"section": section, **(extra_details or {})})
     return FileResponse(file_field, as_attachment=False, filename=download_name)
 
 
@@ -2343,13 +2363,16 @@ class RequestAttachmentDownloadView(LoginRequiredMixin, View):
         if not student or not can_view_student(request.user, student):
             messages.error(request, "You do not have permission to access this file.")
             return redirect("dashboard")
-        log_audit(
-            request.user,
-            "downloaded",
-            attachment,
-            {"section": "request_attachment", "student_id": student.pk, "request_id": attachment.request_id},
+        return verified_file_response(
+            request,
+            file_field=attachment.file,
+            download_name=attachment.original_name or attachment.file.name.rsplit("/", 1)[-1],
+            audit_object=attachment,
+            section="request_attachment",
+            expected_sha256=attachment.file_sha256,
+            expected_size=attachment.file_size,
+            extra_details={"student_id": student.pk, "request_id": attachment.request_id},
         )
-        return file_response_for_field(attachment.file, attachment.original_name or attachment.file.name.rsplit("/", 1)[-1])
 
 
 class RequestResponseAttachmentDownloadView(LoginRequiredMixin, View):
@@ -2364,15 +2387,15 @@ class RequestResponseAttachmentDownloadView(LoginRequiredMixin, View):
             return redirect("dashboard")
         if not response_item.attachment:
             raise Http404("File not found.")
-        log_audit(
-            request.user,
-            "downloaded",
-            response_item,
-            {"section": "request_response_attachment", "student_id": student.pk, "request_id": response_item.request_id},
-        )
-        return file_response_for_field(
-            response_item.attachment,
-            response_item.attachment.name.rsplit("/", 1)[-1],
+        return verified_file_response(
+            request,
+            file_field=response_item.attachment,
+            download_name=response_item.attachment.name.rsplit("/", 1)[-1],
+            audit_object=response_item,
+            section="request_response_attachment",
+            expected_sha256=response_item.attachment_sha256,
+            expected_size=response_item.attachment_size,
+            extra_details={"student_id": student.pk, "request_id": response_item.request_id},
         )
 
 
@@ -2387,15 +2410,15 @@ class PreparedReportAttachmentDownloadView(LoginRequiredMixin, View):
             return redirect("dashboard")
         if not report.attachment:
             raise Http404("File not found.")
-        log_audit(
-            request.user,
-            "downloaded",
-            report,
-            {"section": "prepared_report_attachment", "student_id": report.student_id},
-        )
-        return file_response_for_field(
-            report.attachment,
-            report.attachment.name.rsplit("/", 1)[-1],
+        return verified_file_response(
+            request,
+            file_field=report.attachment,
+            download_name=report.attachment.name.rsplit("/", 1)[-1],
+            audit_object=report,
+            section="prepared_report_attachment",
+            expected_sha256=report.attachment_sha256,
+            expected_size=report.attachment_size,
+            extra_details={"student_id": report.student_id},
         )
 
 

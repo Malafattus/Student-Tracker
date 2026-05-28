@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 from django.conf import settings
@@ -54,6 +55,32 @@ def suspicious_upload_reasons(uploaded_file):
     if sample.startswith(b"MZ"):
         reasons.append("Executable files are not allowed.")
     return reasons
+
+
+def file_sha256(uploaded_file):
+    digest = hashlib.sha256()
+    position = uploaded_file.tell() if hasattr(uploaded_file, "tell") else 0
+    uploaded_file.seek(0)
+    for chunk in uploaded_file.chunks() if hasattr(uploaded_file, "chunks") else iter(lambda: uploaded_file.read(65536), b""):
+        digest.update(chunk)
+    uploaded_file.seek(position)
+    return digest.hexdigest()
+
+
+def file_size_bytes(uploaded_file):
+    if hasattr(uploaded_file, "size") and uploaded_file.size is not None:
+        return int(uploaded_file.size)
+    position = uploaded_file.tell() if hasattr(uploaded_file, "tell") else 0
+    uploaded_file.seek(0, 2)
+    size = uploaded_file.tell()
+    uploaded_file.seek(position)
+    return size
+
+
+def file_integrity_matches(uploaded_file, expected_sha256="", expected_size=0):
+    if not uploaded_file or not expected_sha256:
+        return False
+    return file_sha256(uploaded_file) == expected_sha256 and file_size_bytes(uploaded_file) == int(expected_size or 0)
 
 
 def validate_uploaded_file(uploaded_file):
