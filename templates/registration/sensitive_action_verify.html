@@ -15,7 +15,7 @@
                     <div class="card-body p-4 p-lg-5">
                         <span class="section-kicker">Security check</span>
                         <h1 class="section-title mb-2">Confirm this action</h1>
-                        <p class="section-subtitle mb-4">For extra protection, please confirm your password{% if form.fields.code.widget.input_type != "hidden" %} and current verification code{% endif %} before continuing with {{ target_label }}.</p>
+                        <p class="section-subtitle mb-4">For extra protection, please confirm your password{% if form.fields.code.widget.input_type != "hidden" %}, current verification code{% endif %}{% if form.fields.export_passphrase.widget.input_type != "hidden" %}, and a one-time export password{% endif %} before continuing with {{ target_label }}.</p>
                         {% if messages %}
                             {% for message in messages %}
                                 <div class="alert alert-{{ message.tags|default:'info' }} py-2">{{ message }}</div>
