@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.utils import timezone
 
+from .export_security import secure_export_ready
 from .models import SecurityPolicy, UserSecurityProfile
 from .permissions import is_admin, is_counsellor, is_parent, is_student
 
@@ -111,6 +112,37 @@ def governance_readiness(policy=None, now=None):
         "total_count": len(checks),
         "is_ready": all(checks.values()),
     }
+
+
+def deployment_security_posture():
+    default_key = "django-insecure-local-dev-key-change-me"
+    checks = {
+        "debug_disabled": not getattr(settings, "DEBUG", True),
+        "secret_key_replaced": getattr(settings, "SECRET_KEY", "") != default_key,
+        "https_cookies": bool(getattr(settings, "SESSION_COOKIE_SECURE", False))
+        and bool(getattr(settings, "CSRF_COOKIE_SECURE", False)),
+        "ssl_redirect": bool(getattr(settings, "SECURE_SSL_REDIRECT", False)),
+        "secure_exports_ready": secure_export_ready(),
+        "trusted_hosts_configured": bool(getattr(settings, "ALLOWED_HOSTS", [])),
+    }
+    details = {
+        "checks": checks,
+        "complete_count": sum(1 for value in checks.values() if value),
+        "total_count": len(checks),
+        "is_ready": all(checks.values()),
+        "warnings": [],
+    }
+    if not checks["debug_disabled"]:
+        details["warnings"].append("Debug mode is still on.")
+    if not checks["secret_key_replaced"]:
+        details["warnings"].append("The default secret key is still in use.")
+    if not checks["https_cookies"]:
+        details["warnings"].append("Secure cookie protection is not fully enabled.")
+    if not checks["ssl_redirect"]:
+        details["warnings"].append("Automatic HTTPS redirect is not enabled.")
+    if not checks["secure_exports_ready"]:
+        details["warnings"].append("Encrypted export downloads are not ready on this server.")
+    return details
 
 
 def build_security_review_rows(users=None, policy=None, now=None):

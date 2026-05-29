@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth.models import Group, User
 from django.core.cache import cache
@@ -434,12 +435,16 @@ class CaseTrackerSmokeTests(TestCase):
         client.login(username="admin", password="pass12345")
         session = client.session
         session["approved_sensitive_action_target"] = reverse("security_review_export")
+        session["secure_export_passphrase_target"] = reverse("security_review_export")
+        session[f"secure_export_passphrase:{self.admin_user.pk}"] = "very-secure-passphrase"
         session[f"sensitive_action_verified_at:{self.admin_user.pk}"] = timezone.now().timestamp()
         session.save()
-        response = client.get(reverse("security_review_export"))
+        with patch("cases.views.encrypt_export_bytes", return_value=b"encrypted-review"):
+            response = client.get(reverse("security_review_export"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "text/csv")
-        self.assertIn("Username,Name,Role,Email", response.content.decode("utf-8"))
+        self.assertEqual(response["Content-Type"], "application/octet-stream")
+        self.assertEqual(response.content, b"encrypted-review")
+        self.assertIn(".csv.enc", response["Content-Disposition"])
 
     def test_sensitive_download_requires_fresh_verification(self):
         client = Client()
@@ -448,12 +453,19 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertRedirects(response, reverse("sensitive_action_verify"))
         verify_response = client.post(
             reverse("sensitive_action_verify"),
-            {"password": "pass12345", "code": ""},
+            {
+                "password": "pass12345",
+                "code": "",
+                "export_passphrase": "very-secure-passphrase",
+                "export_passphrase_confirm": "very-secure-passphrase",
+            },
         )
         self.assertRedirects(verify_response, reverse("download_db_backup"), fetch_redirect_response=False)
-        download_response = client.get(reverse("download_db_backup"))
+        with patch("cases.views.encrypt_export_bytes", return_value=b"encrypted-db"):
+            download_response = client.get(reverse("download_db_backup"))
         self.assertEqual(download_response.status_code, 200)
         self.assertIn("attachment;", download_response["Content-Disposition"])
+        self.assertIn(".sqlite3.enc", download_response["Content-Disposition"])
         second_attempt = client.get(reverse("download_db_backup"))
         self.assertRedirects(second_attempt, reverse("sensitive_action_verify"))
 
@@ -495,15 +507,25 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertRedirects(response, reverse("sensitive_action_verify"))
         invalid_response = client.post(
             reverse("sensitive_action_verify"),
-            {"password": "pass12345", "code": "000000"},
+            {
+                "password": "pass12345",
+                "code": "000000",
+                "export_passphrase": "very-secure-passphrase",
+                "export_passphrase_confirm": "very-secure-passphrase",
+            },
         )
         self.assertEqual(invalid_response.status_code, 200)
         self.assertContains(invalid_response, "did not match")
         verify_response = client.post(
             reverse("sensitive_action_verify"),
-            {"password": "pass12345", "code": current_totp_code(secret)},
+            {
+                "password": "pass12345",
+                "code": current_totp_code(secret),
+                "export_passphrase": "very-secure-passphrase",
+                "export_passphrase_confirm": "very-secure-passphrase",
+            },
         )
-        self.assertRedirects(verify_response, reverse("security_review_export"))
+        self.assertRedirects(verify_response, reverse("security_review_export"), fetch_redirect_response=False)
 
     def test_security_policy_can_restrict_staff_domains(self):
         policy = SecurityPolicy.get_solo()
@@ -727,6 +749,26 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["school_managed_auth_ready"], True)
         self.assertEqual(response.json()["governance_ready"], True)
+        self.assertIn("deployment_security_ready", response.json())
+        self.assertIn("deployment_security_checks", response.json())
+
+    @override_settings(
+        DEBUG=False,
+        SECRET_KEY="production-secret-key",
+        SESSION_COOKIE_SECURE=True,
+        CSRF_COOKIE_SECURE=True,
+        SECURE_SSL_REDIRECT=True,
+        ALLOWED_HOSTS=["secure.example.com", "testserver"],
+    )
+    @patch("cases.security.secure_export_ready", return_value=True)
+    def test_security_center_shows_deployment_posture(self, _secure_export_ready):
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        response = client.get(reverse("security_center"), secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Deployment security posture")
+        self.assertContains(response, "Encrypted exports")
+        self.assertContains(response, "Ready")
 
     def test_admin_can_end_current_access_for_account(self):
         admin_client = Client()
@@ -1178,3 +1220,15 @@ class CaseTrackerSmokeTests(TestCase):
         response = client.get(reverse("admin_tools"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Recent security activity")
+
+    def test_security_center_shows_current_detected_ip(self):
+        client = Client()
+        client.login(username="admin", password="pass12345")
+        response = client.get(
+            reverse("security_center"),
+            REMOTE_ADDR="203.0.113.10",
+            HTTP_X_FORWARDED_FOR="203.0.113.10, 10.0.0.1",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Current detected IP")
+        self.assertContains(response, "203.0.113.10")

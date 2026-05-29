@@ -926,15 +926,35 @@ class SensitiveActionVerificationForm(forms.Form):
         label="Verification code",
         help_text="If your account uses multi-factor verification, enter the current 6-digit code.",
     )
+    export_passphrase = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True),
+        label="Export password",
+        help_text="Create a password for this encrypted download.",
+    )
+    export_passphrase_confirm = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True),
+        label="Confirm export password",
+        help_text="Re-enter the export password to avoid locking yourself out of the file.",
+    )
 
-    def __init__(self, *args, user=None, require_mfa=False, **kwargs):
+    def __init__(self, *args, user=None, require_mfa=False, require_export_passphrase=False, **kwargs):
         self.user = user
         self.require_mfa = require_mfa
+        self.require_export_passphrase = require_export_passphrase
         super().__init__(*args, **kwargs)
         if not require_mfa:
             self.fields["code"].widget = forms.HiddenInput()
             self.fields["code"].required = False
             self.fields["code"].help_text = ""
+        if not require_export_passphrase:
+            self.fields["export_passphrase"].widget = forms.HiddenInput()
+            self.fields["export_passphrase"].required = False
+            self.fields["export_passphrase"].help_text = ""
+            self.fields["export_passphrase_confirm"].widget = forms.HiddenInput()
+            self.fields["export_passphrase_confirm"].required = False
+            self.fields["export_passphrase_confirm"].help_text = ""
         apply_bootstrap_classes(self)
 
     def clean_password(self):
@@ -949,6 +969,18 @@ class SensitiveActionVerificationForm(forms.Form):
             if not code.isdigit() or len(code) != 6:
                 raise forms.ValidationError("Enter the 6-digit verification code.")
         return code
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not self.require_export_passphrase:
+            return cleaned_data
+        passphrase = cleaned_data.get("export_passphrase") or ""
+        confirmation = cleaned_data.get("export_passphrase_confirm") or ""
+        if len(passphrase) < 12:
+            self.add_error("export_passphrase", "Use at least 12 characters for the export password.")
+        if passphrase != confirmation:
+            self.add_error("export_passphrase_confirm", "The export passwords did not match.")
+        return cleaned_data
 
 
 def apply_bootstrap_classes(form):
