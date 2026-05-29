@@ -23,6 +23,7 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, FormView, ListView, TemplateView, UpdateView
 
 from .audit import log_audit, log_security_event
+from .export_security import SecureExportError, encrypt_export_bytes
 from .file_security import file_integrity_matches, validate_uploaded_file
 from .forms import (
     CommunicationTemplateForm,
@@ -108,7 +109,11 @@ from .permissions import (
 )
 from .security import (
     build_security_review_rows,
+    deployment_security_posture,
+    emergency_lockdown_active,
+    emergency_lockdown_message,
     governance_readiness,
+    lockdown_applies_to_user,
     local_staff_login_allowed,
     mfa_required_for_user,
     school_managed_auth_ready,
@@ -181,6 +186,10 @@ def sensitive_action_session_key(user):
     return f"sensitive_action_verified_at:{user.pk}"
 
 
+def secure_export_passphrase_session_key(user):
+    return f"secure_export_passphrase:{user.pk}"
+
+
 def sensitive_action_recently_verified(request):
     if not request.user.is_authenticated:
         return False
@@ -204,6 +213,36 @@ def mark_sensitive_action_verified(request, target):
     request.session[sensitive_action_session_key(request.user)] = timezone.now().timestamp()
 
 
+def export_target_paths():
+    return {
+        reverse("download_db_backup"),
+        reverse("download_csv_export"),
+        reverse("security_review_export"),
+    }
+
+
+def sensitive_action_requires_export_passphrase(path):
+    return path in export_target_paths()
+
+
+def mark_secure_export_passphrase(request, target, passphrase):
+    request.session["secure_export_passphrase_target"] = target
+    request.session[secure_export_passphrase_session_key(request.user)] = passphrase
+
+
+def consume_secure_export_passphrase(request):
+    if not request.user.is_authenticated:
+        return ""
+    target = request.session.get("secure_export_passphrase_target")
+    session_key = secure_export_passphrase_session_key(request.user)
+    passphrase = request.session.get(session_key, "")
+    request.session.pop("secure_export_passphrase_target", None)
+    request.session.pop(session_key, None)
+    if target != request.get_full_path():
+        return ""
+    return passphrase
+
+
 def sensitive_action_redirect(request):
     if request.path == reverse("download_db_backup"):
         label = "downloading the database backup"
@@ -217,6 +256,9 @@ def sensitive_action_redirect(request):
         label = "this sensitive action"
     request.session["post_sensitive_action_redirect"] = request.get_full_path()
     request.session["post_sensitive_action_label"] = label
+    request.session["post_sensitive_action_requires_export_passphrase"] = sensitive_action_requires_export_passphrase(
+        request.get_full_path()
+    )
     return redirect("sensitive_action_verify")
 
 
@@ -309,6 +351,20 @@ class RoleAwareLoginView(auth_views.LoginView):
     def form_valid(self, form):
         compliance = user_security_compliance_state(form.get_user())
         security_profile = compliance["security_profile"]
+        if lockdown_applies_to_user(form.get_user(), policy=compliance["policy"]):
+            log_security_event(
+                "login_blocked",
+                "Blocked login during emergency lockdown",
+                {
+                    "section": "emergency_lockdown",
+                    "login_identifier": self.login_identifier(),
+                    "ip_address": client_ip_address(self.request),
+                    "user_id": form.get_user().pk,
+                },
+                actor=form.get_user(),
+            )
+            messages.error(self.request, emergency_lockdown_message(policy=compliance["policy"]))
+            return self.get(self.request)
         if security_profile and security_profile.manually_locked:
             log_security_event(
                 "login_blocked",
@@ -595,6 +651,22 @@ def verified_file_response(request, *, file_field, download_name, audit_object, 
         return redirect("dashboard")
     log_audit(request.user, "downloaded", audit_object, {"section": section, **(extra_details or {})})
     return FileResponse(file_field, as_attachment=False, filename=download_name)
+
+
+def encrypted_export_response(request, payload, filename, section):
+    passphrase = consume_secure_export_passphrase(request)
+    if not passphrase:
+        messages.error(request, "Please confirm this export again so a secure download password can be applied.")
+        return sensitive_action_redirect(request)
+    try:
+        encrypted_payload = encrypt_export_bytes(payload, passphrase)
+    except SecureExportError as exc:
+        messages.error(request, str(exc))
+        return redirect("admin_tools")
+    response = HttpResponse(encrypted_payload, content_type="application/octet-stream")
+    response["Content-Disposition"] = f'attachment; filename="{filename}.enc"'
+    log_audit(request.user, "downloaded", request.user, {"section": section, "encrypted": True})
+    return response
 
 
 def client_ip_address(request):
@@ -1520,6 +1592,25 @@ class StudentRequestPublicCreateView(CreateView):
     template_name = "cases/student_request_public.html"
     throttle_limit = 5
     throttle_window_seconds = 900
+
+    def dispatch(self, request, *args, **kwargs):
+        policy = SecurityPolicy.get_solo()
+        if emergency_lockdown_active(policy=policy):
+            log_security_event(
+                "public_access_blocked",
+                "Blocked public request form during emergency lockdown",
+                {"section": "emergency_lockdown", "ip_address": client_ip_address(request)},
+            )
+            return render(
+                request,
+                self.template_name,
+                {
+                    "form": self.get_form(),
+                    "lockdown_message": emergency_lockdown_message(policy=policy),
+                },
+                status=503,
+            )
+        return super().dispatch(request, *args, **kwargs)
 
     def get_initial(self):
         initial = super().get_initial()
@@ -2517,6 +2608,7 @@ class HealthReadyView(View):
     def get(self, request):
         policy = SecurityPolicy.get_solo()
         governance = governance_readiness(policy=policy)
+        deployment = deployment_security_posture()
         try:
             connection.ensure_connection()
             database_ok = True
@@ -2527,8 +2619,12 @@ class HealthReadyView(View):
                 "status": "ok" if database_ok else "degraded",
                 "database": database_ok,
                 "school_managed_auth_ready": school_managed_auth_ready(policy=policy),
+                "emergency_lockdown_active": emergency_lockdown_active(policy=policy),
                 "governance_ready": governance["is_ready"],
                 "governance_checks": governance["checks"],
+                "deployment_security_ready": deployment["is_ready"],
+                "deployment_security_checks": deployment["checks"],
+                "deployment_security_warnings": deployment["warnings"],
             },
             status=200 if database_ok else 503,
         )
@@ -2605,6 +2701,7 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
         policy = SecurityPolicy.get_solo()
         security_rows = build_security_review_rows(policy=policy)
         governance = governance_readiness(policy=policy)
+        deployment = deployment_security_posture()
         current_ip = client_ip_address(self.request)
         forwarded_for = (self.request.META.get("HTTP_X_FORWARDED_FOR", "") or "").strip()
         recent_signins = AuditLog.objects.filter(
@@ -2621,6 +2718,8 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
         context["policy"] = policy
         context["recent_signins"] = recent_signins
         context["governance_readiness"] = governance
+        context["deployment_posture"] = deployment
+        context["lockdown_message"] = emergency_lockdown_message(policy=policy)
         context["current_detected_ip"] = current_ip
         context["current_forwarded_for"] = forwarded_for
         context["security_overview"] = {
@@ -2632,6 +2731,7 @@ class SecurityCenterView(LoginRequiredMixin, TemplateView):
             "dormant_accounts": sum(1 for row in security_rows if row["dormant_for_review"]),
             "new_signin_alerts": new_signin_alerts,
             "revoked_sessions": sum(1 for row in security_rows if row["profile"].session_revoked_at),
+            "lockdown_active": policy.emergency_lockdown_enabled,
         }
         return context
 
@@ -2803,6 +2903,9 @@ class SensitiveActionVerificationView(LoginRequiredMixin, FormView):
         kwargs["user"] = self.request.user
         security_profile = getattr(self.request.user, "security_profile", None)
         kwargs["require_mfa"] = bool(security_profile and security_profile.mfa_enabled)
+        kwargs["require_export_passphrase"] = bool(
+            self.request.session.get("post_sensitive_action_requires_export_passphrase")
+        )
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -2819,10 +2922,13 @@ class SensitiveActionVerificationView(LoginRequiredMixin, FormView):
         clear_auth_step_failures("sensitive-action", f"{self.request.user.pk}:{client_ip_address(self.request)}")
         target = self.request.session.get("post_sensitive_action_redirect") or reverse("security_center")
         mark_sensitive_action_verified(self.request, target)
+        if self.request.session.get("post_sensitive_action_requires_export_passphrase"):
+            mark_secure_export_passphrase(self.request, target, form.cleaned_data.get("export_passphrase", ""))
         log_audit(self.request.user, "updated", self.request.user, {"section": "sensitive_action_verify"})
         messages.success(self.request, "Verification confirmed.")
         redirect_to = self.request.session.pop("post_sensitive_action_redirect", "")
         self.request.session.pop("post_sensitive_action_label", None)
+        self.request.session.pop("post_sensitive_action_requires_export_passphrase", None)
         return redirect(redirect_to or reverse("security_center"))
 
     def form_invalid(self, form):
@@ -2861,8 +2967,14 @@ class DatabaseBackupDownloadView(LoginRequiredMixin, View):
         db_path = settings.BASE_DIR / "db.sqlite3"
         if not db_path.exists():
             raise Http404("Database file not found.")
-        log_audit(request.user, "downloaded", request.user, {"section": "database_backup"})
-        return FileResponse(open(db_path, "rb"), as_attachment=True, filename=f"uis-student-record-system-backup-{timezone.now():%Y%m%d-%H%M}.sqlite3")
+        with open(db_path, "rb") as handle:
+            payload = handle.read()
+        return encrypted_export_response(
+            request,
+            payload,
+            f"uis-student-record-system-backup-{timezone.now():%Y%m%d-%H%M}.sqlite3",
+            "database_backup",
+        )
 
 
 class SecurityReviewExportView(LoginRequiredMixin, View):
@@ -2910,10 +3022,12 @@ class SecurityReviewExportView(LoginRequiredMixin, View):
                     ", ".join(row["issues"]),
                 ]
             )
-        response = HttpResponse(csv_buffer.getvalue(), content_type="text/csv")
-        response["Content-Disposition"] = f'attachment; filename="uis-security-review-{timezone.now():%Y%m%d-%H%M}.csv"'
-        log_audit(request.user, "downloaded", request.user, {"section": "security_review_export"})
-        return response
+        return encrypted_export_response(
+            request,
+            csv_buffer.getvalue().encode("utf-8"),
+            f"uis-security-review-{timezone.now():%Y%m%d-%H%M}.csv",
+            "security_review_export",
+        )
 
 
 class CsvExportDownloadView(LoginRequiredMixin, View):
@@ -2928,10 +3042,12 @@ class CsvExportDownloadView(LoginRequiredMixin, View):
             self._write_sessions_csv(archive)
             self._write_tasks_csv(archive)
         buffer.seek(0)
-        response = HttpResponse(buffer.getvalue(), content_type="application/zip")
-        response["Content-Disposition"] = f'attachment; filename="uis-student-record-system-exports-{timezone.now():%Y%m%d-%H%M}.zip"'
-        log_audit(request.user, "downloaded", request.user, {"section": "csv_export"})
-        return response
+        return encrypted_export_response(
+            request,
+            buffer.getvalue(),
+            f"uis-student-record-system-exports-{timezone.now():%Y%m%d-%H%M}.zip",
+            "csv_export",
+        )
 
     def _write_students_csv(self, archive):
         csv_buffer = io.StringIO()

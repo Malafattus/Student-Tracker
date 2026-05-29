@@ -6,9 +6,15 @@
     <p class="text-muted mb-0">Set baseline account rules, review staff account safety, and quickly tighten access when something needs attention.</p>
 </div>
 <div class="mb-3">
-    <a class="btn btn-outline-primary" href="{% url 'security_review_export' %}">Download access review CSV</a>
+    <a class="btn btn-outline-primary" href="{% url 'security_review_export' %}">Download encrypted access review CSV</a>
     <div class="small text-muted mt-2">Sensitive exports and security changes now ask for a fresh confirmation before they go through.</div>
 </div>
+{% if security_overview.lockdown_active %}
+    <div class="callout-warning mb-4">
+        <div class="fw-semibold mb-2">Emergency lockdown is active</div>
+        <div>{{ lockdown_message }}</div>
+    </div>
+{% endif %}
 <div class="card shadow-sm mb-4">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
@@ -21,6 +27,66 @@
                 <div class="fw-semibold">{{ governance_readiness.complete_count }} / {{ governance_readiness.total_count }} checks complete</div>
             </div>
         </div>
+    </div>
+</div>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
+            <div>
+                <h2 class="h5 mb-1">Deployment security posture</h2>
+                <div class="text-muted">See whether the live server is actually enforcing the protections the app expects.</div>
+            </div>
+            <div class="text-end">
+                <div class="small text-muted">Server posture</div>
+                <div class="fw-semibold">{{ deployment_posture.complete_count }} / {{ deployment_posture.total_count }} checks complete</div>
+            </div>
+        </div>
+        <div class="row g-3 mt-1">
+            <div class="col-md-4">
+                <div class="border rounded-3 p-3 h-100">
+                    <div class="small text-muted mb-1">Debug mode</div>
+                    <div class="fw-semibold">{% if deployment_posture.checks.debug_disabled %}Off{% else %}Still on{% endif %}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded-3 p-3 h-100">
+                    <div class="small text-muted mb-1">Secret key</div>
+                    <div class="fw-semibold">{% if deployment_posture.checks.secret_key_replaced %}Custom{% else %}Default key still active{% endif %}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded-3 p-3 h-100">
+                    <div class="small text-muted mb-1">Secure cookies</div>
+                    <div class="fw-semibold">{% if deployment_posture.checks.https_cookies %}Enabled{% else %}Not fully enabled{% endif %}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded-3 p-3 h-100">
+                    <div class="small text-muted mb-1">HTTPS redirect</div>
+                    <div class="fw-semibold">{% if deployment_posture.checks.ssl_redirect %}Enabled{% else %}Not enabled{% endif %}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded-3 p-3 h-100">
+                    <div class="small text-muted mb-1">Encrypted exports</div>
+                    <div class="fw-semibold">{% if deployment_posture.checks.secure_exports_ready %}Ready{% else %}Server tool missing{% endif %}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded-3 p-3 h-100">
+                    <div class="small text-muted mb-1">Allowed hosts</div>
+                    <div class="fw-semibold">{% if deployment_posture.checks.trusted_hosts_configured %}Configured{% else %}Not configured{% endif %}</div>
+                </div>
+            </div>
+        </div>
+        {% if deployment_posture.warnings %}
+            <div class="callout-warning mt-3 mb-0">
+                <div class="fw-semibold mb-2">Current warnings</div>
+                {% for warning in deployment_posture.warnings %}
+                    <div>{{ warning }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
     </div>
 </div>
 <div class="row g-4">
@@ -46,6 +112,12 @@
             </div>
             <div class="card-body">
                 <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="small text-muted mb-1">Emergency lockdown</div>
+                            <div class="fw-semibold">{% if policy.emergency_lockdown_enabled %}Active{% else %}Off{% endif %}</div>
+                        </div>
+                    </div>
                     <div class="col-md-4">
                         <div class="border rounded-3 p-3 h-100">
                             <div class="small text-muted mb-1">Staff email restriction</div>
