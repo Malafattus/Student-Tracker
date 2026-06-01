@@ -13,6 +13,9 @@
     <div class="callout-warning mb-4">
         <div class="fw-semibold mb-2">Emergency lockdown is active</div>
         <div>{{ lockdown_message }}</div>
+        {% if lockdown_sources %}
+            <div class="small mt-2">Source: {{ lockdown_sources|join:", " }}</div>
+        {% endif %}
     </div>
 {% endif %}
 <div class="card shadow-sm mb-4">
@@ -66,16 +69,40 @@
                     <div class="fw-semibold">{% if deployment_posture.checks.ssl_redirect %}Enabled{% else %}Not enabled{% endif %}</div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="border rounded-3 p-3 h-100">
-                    <div class="small text-muted mb-1">Encrypted exports</div>
-                    <div class="fw-semibold">{% if deployment_posture.checks.secure_exports_ready %}Ready{% else %}Server tool missing{% endif %}</div>
-                </div>
+              <div class="col-md-4">
+                  <div class="border rounded-3 p-3 h-100">
+                      <div class="small text-muted mb-1">Encrypted exports</div>
+                      <div class="fw-semibold">{% if deployment_posture.checks.secure_exports_ready %}Ready{% else %}Server tool missing{% endif %}</div>
+                  </div>
+              </div>
+              <div class="col-md-4">
+                  <div class="border rounded-3 p-3 h-100">
+                      <div class="small text-muted mb-1">Sensitive field encryption</div>
+                      <div class="fw-semibold">{% if deployment_posture.checks.sensitive_fields_encrypted %}Active{% else %}Not configured{% endif %}</div>
+                  </div>
+              </div>
+              <div class="col-md-4">
+                  <div class="border rounded-3 p-3 h-100">
+                      <div class="small text-muted mb-1">Separate field key</div>
+                      <div class="fw-semibold">{% if deployment_posture.checks.dedicated_field_key %}Configured{% else %}Using main secret{% endif %}</div>
+                  </div>
+              </div>
+              <div class="col-md-4">
+                  <div class="border rounded-3 p-3 h-100">
+                      <div class="small text-muted mb-1">Field key rotation</div>
+                      <div class="fw-semibold">{% if deployment_posture.checks.field_key_rotation_ready %}Ready{% else %}Single-key only{% endif %}</div>
+                  </div>
+              </div>
+              <div class="col-md-4">
+                  <div class="border rounded-3 p-3 h-100">
+                      <div class="small text-muted mb-1">Allowed hosts</div>
+                      <div class="fw-semibold">{% if deployment_posture.checks.trusted_hosts_configured %}Configured{% else %}Not configured{% endif %}</div>
+                  </div>
             </div>
             <div class="col-md-4">
                 <div class="border rounded-3 p-3 h-100">
-                    <div class="small text-muted mb-1">Allowed hosts</div>
-                    <div class="fw-semibold">{% if deployment_posture.checks.trusted_hosts_configured %}Configured{% else %}Not configured{% endif %}</div>
+                    <div class="small text-muted mb-1">Outside lockdown control</div>
+                    <div class="fw-semibold">{% if deployment_posture.checks.external_lockdown_control %}Configured{% else %}Not configured{% endif %}</div>
                 </div>
             </div>
         </div>
@@ -210,6 +237,10 @@
                     {% else %}
                         None configured.
                     {% endif %}
+                </div>
+                <div class="mt-2 small text-muted">
+                    Outside-the-app lockdown:
+                    Set <code>DJANGO_EMERGENCY_LOCKDOWN=True</code> or create the file at <code>{{ lockdown_file_path|default:"EMERGENCY_LOCKDOWN" }}</code> on the server.
                 </div>
             </div>
         </div>

@@ -1,11 +1,13 @@
 from datetime import timedelta
 import ipaddress
+from pathlib import Path
 
 from django.conf import settings
 
 from django.contrib.auth.models import User
 from django.utils import timezone
 
+from .crypto import field_encryption_ready, field_encryption_rotation_ready, field_encryption_uses_dedicated_key
 from .export_security import secure_export_ready
 from .models import SecurityPolicy, UserSecurityProfile
 from .permissions import is_admin, is_counsellor, is_parent, is_student
@@ -46,6 +48,11 @@ def user_security_compliance_state(user, policy=None):
 
 def emergency_lockdown_active(policy=None):
     policy = policy or SecurityPolicy.get_solo()
+    if getattr(settings, "EMERGENCY_LOCKDOWN_ENV_ENABLED", False):
+        return True
+    lockdown_file = Path(getattr(settings, "EMERGENCY_LOCKDOWN_FILE", ""))
+    if str(lockdown_file).strip() and lockdown_file.exists():
+        return True
     return bool(policy.emergency_lockdown_enabled)
 
 
@@ -53,6 +60,19 @@ def emergency_lockdown_message(policy=None):
     policy = policy or SecurityPolicy.get_solo()
     configured = (policy.emergency_lockdown_message or "").strip()
     return configured or "Access is temporarily paused while the system is in emergency security mode."
+
+
+def emergency_lockdown_sources(policy=None):
+    policy = policy or SecurityPolicy.get_solo()
+    sources = []
+    if policy.emergency_lockdown_enabled:
+        sources.append("security_center")
+    if getattr(settings, "EMERGENCY_LOCKDOWN_ENV_ENABLED", False):
+        sources.append("environment")
+    lockdown_file = Path(getattr(settings, "EMERGENCY_LOCKDOWN_FILE", ""))
+    if str(lockdown_file).strip() and lockdown_file.exists():
+        sources.append("lockdown_file")
+    return sources
 
 
 def lockdown_exempt_user(user, policy=None):
@@ -128,7 +148,7 @@ def governance_readiness(policy=None, now=None):
         "operations_review": bool(policy.last_operations_review_at),
         "school_auth": school_managed_auth_ready(policy=policy),
         "staff_ip_ranges": (not policy.restrict_staff_to_allowed_ip_ranges) or bool(policy.allowed_ip_ranges),
-        "lockdown_clear": not policy.emergency_lockdown_enabled,
+        "lockdown_clear": not emergency_lockdown_active(policy=policy),
     }
     return {
         "checks": checks,
@@ -147,7 +167,12 @@ def deployment_security_posture():
         and bool(getattr(settings, "CSRF_COOKIE_SECURE", False)),
         "ssl_redirect": bool(getattr(settings, "SECURE_SSL_REDIRECT", False)),
         "secure_exports_ready": secure_export_ready(),
+        "sensitive_fields_encrypted": field_encryption_ready(),
+        "dedicated_field_key": field_encryption_uses_dedicated_key(),
+        "field_key_rotation_ready": field_encryption_rotation_ready(),
         "trusted_hosts_configured": bool(getattr(settings, "ALLOWED_HOSTS", [])),
+        "external_lockdown_control": bool(getattr(settings, "EMERGENCY_LOCKDOWN_FILE", "").strip())
+        or getattr(settings, "EMERGENCY_LOCKDOWN_ENV_ENABLED", False),
     }
     details = {
         "checks": checks,
@@ -166,6 +191,14 @@ def deployment_security_posture():
         details["warnings"].append("Automatic HTTPS redirect is not enabled.")
     if not checks["secure_exports_ready"]:
         details["warnings"].append("Encrypted export downloads are not ready on this server.")
+    if not checks["sensitive_fields_encrypted"]:
+        details["warnings"].append("Sensitive text field encryption is not configured.")
+    if not checks["dedicated_field_key"]:
+        details["warnings"].append("Sensitive field encryption is using the main Django secret instead of a separate key.")
+    if not checks["field_key_rotation_ready"]:
+        details["warnings"].append("Sensitive field encryption is not yet configured with multiple key versions for rotation.")
+    if not checks["external_lockdown_control"]:
+        details["warnings"].append("No outside-the-app emergency lockdown control is configured.")
     return details
 
 
