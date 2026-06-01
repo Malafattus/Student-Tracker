@@ -7,7 +7,26 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def parse_field_encryption_keys(raw_value):
+    parsed = {}
+    for part in (raw_value or "").split(","):
+        item = part.strip()
+        if not item:
+            continue
+        key_id, separator, secret = item.partition(":")
+        if not separator or not key_id.strip() or not secret.strip():
+            continue
+        parsed[key_id.strip()] = secret.strip()
+    return parsed
+
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-local-dev-key-change-me")
+FIELD_ENCRYPTION_DEDICATED_KEY_CONFIGURED = bool(
+    os.environ.get("DJANGO_FIELD_ENCRYPTION_KEY") or os.environ.get("DJANGO_FIELD_ENCRYPTION_KEYS")
+)
+FIELD_ENCRYPTION_KEY = os.environ.get("DJANGO_FIELD_ENCRYPTION_KEY") or SECRET_KEY
+FIELD_ENCRYPTION_KEYS = parse_field_encryption_keys(os.environ.get("DJANGO_FIELD_ENCRYPTION_KEYS", ""))
+FIELD_ENCRYPTION_ACTIVE_KEY = os.environ.get("DJANGO_FIELD_ENCRYPTION_ACTIVE_KEY", "").strip()
 DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
 
 allowed_hosts = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,testserver")
@@ -125,11 +144,15 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_IDLE_TIMEOUT_SECONDS = int(os.environ.get("DJANGO_SESSION_IDLE_TIMEOUT_SECONDS", "1800"))
 SECURE_REFERRER_POLICY = "same-origin"
 SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+EMERGENCY_LOCKDOWN_ENV_ENABLED = os.environ.get("DJANGO_EMERGENCY_LOCKDOWN", "False").lower() == "true"
+EMERGENCY_LOCKDOWN_FILE = os.environ.get("DJANGO_EMERGENCY_LOCKDOWN_FILE", str(BASE_DIR / "EMERGENCY_LOCKDOWN"))
 LOGIN_FAILURE_LIMIT = int(os.environ.get("DJANGO_LOGIN_FAILURE_LIMIT", "5"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("DJANGO_LOGIN_LOCKOUT_SECONDS", "900"))
 MFA_FAILURE_LIMIT = int(os.environ.get("DJANGO_MFA_FAILURE_LIMIT", "5"))
 MFA_LOCKOUT_SECONDS = int(os.environ.get("DJANGO_MFA_LOCKOUT_SECONDS", "900"))
 SENSITIVE_ACTION_REVERIFY_SECONDS = int(os.environ.get("DJANGO_SENSITIVE_ACTION_REVERIFY_SECONDS", "600"))
+SECURE_EXPORT_OPENSSL_BINARY = os.environ.get("DJANGO_SECURE_EXPORT_OPENSSL_BINARY", "openssl")
+SECURE_EXPORT_PBKDF2_ITERATIONS = int(os.environ.get("DJANGO_SECURE_EXPORT_PBKDF2_ITERATIONS", "200000"))
 TRUSTED_IDENTITY_ENABLED = os.environ.get("DJANGO_TRUSTED_IDENTITY_ENABLED", "False").lower() == "true"
 TRUSTED_IDENTITY_PROVIDER_NAME = os.environ.get("DJANGO_TRUSTED_IDENTITY_PROVIDER_NAME", "School SSO")
 TRUSTED_IDENTITY_EMAIL_HEADER = os.environ.get("DJANGO_TRUSTED_IDENTITY_EMAIL_HEADER", "HTTP_X_AUTHENTICATED_EMAIL")
@@ -144,7 +167,7 @@ CSP_DEFAULT_SRC = ("'self'",)
 CSP_IMG_SRC = ("'self'", "data:")
 CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net")
 CSP_FONT_SRC = ("'self'", "data:", "https://cdn.jsdelivr.net")
-CSP_SCRIPT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = ("'self'", "https://cdn.jsdelivr.net")
 
 EMAIL_BACKEND = os.environ.get("DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "noreply@studenttracker.local")
