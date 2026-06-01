@@ -7,6 +7,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 
+from .fields import EncryptedTextField
 from .file_security import file_sha256, file_size_bytes
 
 
@@ -135,7 +136,7 @@ class Student(TimeStampedModel):
     parent_guardian_email = models.EmailField(blank=True)
     parent_guardian_phone = models.CharField(max_length=50, blank=True)
     academic_status = models.CharField(max_length=30, choices=ACADEMIC_STATUS_CHOICES, default=STATUS_GOOD)
-    attendance_concerns = models.TextField(blank=True)
+    attendance_concerns = EncryptedTextField(blank=True)
     ossd_credit_progress = models.CharField(max_length=30, choices=PROGRESS_CHOICES, default=STATUS_ON_TRACK)
     graduation_status = models.CharField(max_length=30, choices=GRADUATION_STATUS_CHOICES, default=STATUS_PENDING)
     counselling_status = models.CharField(max_length=30, choices=COUNSELLING_STATUS_CHOICES, default=STATUS_ACTIVE)
@@ -144,13 +145,13 @@ class Student(TimeStampedModel):
     insurance_status = models.CharField(max_length=20, choices=DOCUMENT_STATUS_CHOICES, default="pending")
     target_country = models.CharField(max_length=100, blank=True)
     target_program = models.CharField(max_length=255, blank=True)
-    target_universities = models.TextField(blank=True)
+    target_universities = EncryptedTextField(blank=True)
     ielts_english_status = models.CharField(max_length=255, blank=True)
     university_application_status = models.CharField(
         max_length=30, choices=APPLICATION_STATUS_CHOICES, default=STATUS_PENDING
     )
     overall_risk_level = models.CharField(max_length=20, choices=RISK_LEVEL_CHOICES, default="low")
-    internal_summary = models.TextField(blank=True)
+    internal_summary = EncryptedTextField(blank=True)
     case_stage = models.CharField(max_length=30, choices=CASE_STAGE_CHOICES, default=STAGE_ACTIVE)
     next_review_date = models.DateField(blank=True, null=True)
     required_credits = models.PositiveSmallIntegerField(default=30)
@@ -245,6 +246,8 @@ class UserSecurityProfile(TimeStampedModel):
 
 
 class SecurityPolicy(TimeStampedModel):
+    emergency_lockdown_enabled = models.BooleanField(default=False)
+    emergency_lockdown_message = models.TextField(blank=True)
     require_staff_domain_match = models.BooleanField(default=False)
     allowed_staff_email_domains = models.TextField(blank=True)
     block_noncompliant_staff_signins = models.BooleanField(default=False)
@@ -356,10 +359,10 @@ class StudentTermRecord(TimeStampedModel):
     is_completed = models.BooleanField(default=False)
     midterm_reminder_sent_at = models.DateTimeField(blank=True, null=True)
     final_reminder_sent_at = models.DateTimeField(blank=True, null=True)
-    academic_summary = models.TextField(blank=True)
-    attendance_summary = models.TextField(blank=True)
-    counselling_summary = models.TextField(blank=True)
-    agent_notes = models.TextField(blank=True)
+    academic_summary = EncryptedTextField(blank=True)
+    attendance_summary = EncryptedTextField(blank=True)
+    counselling_summary = EncryptedTextField(blank=True)
+    agent_notes = EncryptedTextField(blank=True)
 
     class Meta:
         ordering = ["term__school_year", "term__display_order"]
@@ -459,7 +462,7 @@ def prepared_report_upload_to(instance, filename):
 class StudentNote(TimeStampedModel):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="notes")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
-    note = models.TextField()
+    note = EncryptedTextField()
 
     class Meta:
         ordering = ["-created_at"]
@@ -664,7 +667,7 @@ class StudentRequest(TimeStampedModel):
     student_identifier = models.CharField(max_length=50, blank=True)
     request_type = models.CharField(max_length=30, choices=REQUEST_TYPE_CHOICES)
     title = models.CharField(max_length=255)
-    details = models.TextField()
+    details = EncryptedTextField()
     preferred_date = models.DateField(blank=True, null=True)
     preferred_time = models.CharField(max_length=100, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
@@ -677,7 +680,7 @@ class StudentRequest(TimeStampedModel):
         related_name="closed_student_requests",
     )
     closed_at = models.DateTimeField(blank=True, null=True)
-    internal_notes = models.TextField(blank=True)
+    internal_notes = EncryptedTextField(blank=True)
     confirmation_sent_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
@@ -734,7 +737,7 @@ class CounsellingSession(TimeStampedModel):
     location = models.CharField(max_length=255, blank=True)
     meeting_link = models.URLField(blank=True)
     confirmation_email = models.EmailField(blank=True)
-    notes = models.TextField(blank=True)
+    notes = EncryptedTextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_SCHEDULED)
     confirmation_sent_at = models.DateTimeField(blank=True, null=True)
     reminder_sent_at = models.DateTimeField(blank=True, null=True)
@@ -814,7 +817,7 @@ class StudentRequestResponse(TimeStampedModel):
     request = models.ForeignKey(StudentRequest, on_delete=models.CASCADE, related_name="responses")
     sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     subject = models.CharField(max_length=255)
-    message = models.TextField()
+    message = EncryptedTextField()
     recipient_email = models.EmailField()
     attachment = models.FileField(upload_to=request_response_upload_to, blank=True)
     attachment_sha256 = models.CharField(max_length=64, blank=True)
@@ -882,11 +885,11 @@ class PreparedReport(TimeStampedModel):
     title = models.CharField(max_length=255)
     recipient_name = models.CharField(max_length=255, blank=True)
     recipient_email = models.EmailField(blank=True)
-    summary = models.TextField(blank=True)
-    academic_progress = models.TextField(blank=True)
-    attendance_update = models.TextField(blank=True)
-    counselling_update = models.TextField(blank=True)
-    recommendations = models.TextField(blank=True)
+    summary = EncryptedTextField(blank=True)
+    academic_progress = EncryptedTextField(blank=True)
+    attendance_update = EncryptedTextField(blank=True)
+    counselling_update = EncryptedTextField(blank=True)
+    recommendations = EncryptedTextField(blank=True)
     attachment = models.FileField(upload_to=prepared_report_upload_to, blank=True)
     attachment_sha256 = models.CharField(max_length=64, blank=True)
     attachment_size = models.PositiveBigIntegerField(default=0)
