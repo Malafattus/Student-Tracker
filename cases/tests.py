@@ -1,4 +1,6 @@
 from datetime import date, timedelta
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group, User
@@ -6,11 +8,14 @@ from django.core.cache import cache
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.db import connection
 from django.test import Client, TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from .crypto import decrypt_text, encrypt_text, encrypted_text_version
+from .fields import UNREADABLE_ENCRYPTED_VALUE
 from .models import (
     AcademicTerm,
     AuditLog,
@@ -266,6 +271,147 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "file type is not allowed")
         self.assertEqual(StudentRequest.objects.count(), 0)
+
+    def test_sensitive_request_details_are_encrypted_at_rest(self):
+        request_item = StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_COUNSELLING,
+            title="Need counselling",
+            details="Please book a support session.",
+        )
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT details FROM cases_studentrequest WHERE id = %s", [request_item.pk])
+            stored_value = cursor.fetchone()[0]
+        self.assertTrue(stored_value.startswith("enc2$"))
+        self.assertNotIn("Please book a support session.", stored_value)
+        request_item.refresh_from_db()
+        self.assertEqual(request_item.details, "Please book a support session.")
+
+    def test_unreadable_encrypted_value_does_not_crash_query(self):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO cases_studentrequest
+                (created_at, updated_at, submitted_by_name, submitted_by_email, title, student_identifier, request_type, details, status, student_id, assigned_to_id, preferred_date, preferred_time, status_before_close, internal_notes, confirmation_sent_at, closed_by_id, closed_at)
+                VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, NULL, NULL, NULL)
+                """,
+                [
+                    "Jamie Student",
+                    "jamie@example.com",
+                    "Need counselling",
+                    self.student.student_id,
+                    StudentRequest.REQUEST_COUNSELLING,
+                    "enc2$primary$broken-token",
+                    StudentRequest.STATUS_NEW,
+                    self.student.pk,
+                    self.counsellor.pk,
+                    "",
+                    "",
+                    "",
+                ],
+            )
+        request_item = StudentRequest.objects.latest("id")
+        self.assertEqual(request_item.details, UNREADABLE_ENCRYPTED_VALUE)
+
+    def test_sensitive_field_encryption_audit_reports_success(self):
+        StudentRequest.objects.create(
+            student=self.student,
+            assigned_to=self.counsellor,
+            submitted_by_name="Jamie Student",
+            submitted_by_email="jamie@example.com",
+            student_identifier=self.student.student_id,
+            request_type=StudentRequest.REQUEST_COUNSELLING,
+            title="Need counselling",
+            details="Please book a support session.",
+        )
+        out = tempfile.TemporaryFile(mode="w+")
+        call_command("audit_sensitive_field_encryption", stdout=out)
+        out.seek(0)
+        output = out.read()
+        self.assertIn("All audited sensitive fields are stored in encrypted form.", output)
+
+    def test_sensitive_field_encryption_audit_reports_unreadable_values(self):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO cases_studentrequest
+                (created_at, updated_at, submitted_by_name, submitted_by_email, title, student_identifier, request_type, details, status, student_id, assigned_to_id, preferred_date, preferred_time, status_before_close, internal_notes, confirmation_sent_at, closed_by_id, closed_at)
+                VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, NULL, NULL, NULL)
+                """,
+                [
+                    "Jamie Student",
+                    "jamie@example.com",
+                    "Need counselling",
+                    self.student.student_id,
+                    StudentRequest.REQUEST_COUNSELLING,
+                    "enc2$primary$broken-token",
+                    StudentRequest.STATUS_NEW,
+                    self.student.pk,
+                    self.counsellor.pk,
+                    "",
+                    "",
+                    "",
+                ],
+            )
+        out = tempfile.TemporaryFile(mode="w+")
+        err = tempfile.TemporaryFile(mode="w+")
+        call_command("audit_sensitive_field_encryption", stdout=out, stderr=err)
+        out.seek(0)
+        err.seek(0)
+        self.assertIn("unreadable encrypted value(s)", out.read())
+        self.assertIn("Found 1 unreadable encrypted sensitive value(s).", err.read())
+
+    @override_settings(
+        FIELD_ENCRYPTION_KEY="legacy-field-key",
+        FIELD_ENCRYPTION_KEYS={"primary": "new-field-key", "legacy": "legacy-field-key"},
+        FIELD_ENCRYPTION_ACTIVE_KEY="primary",
+        FIELD_ENCRYPTION_DEDICATED_KEY_CONFIGURED=True,
+    )
+    def test_sensitive_field_rotation_command_reencrypts_legacy_values(self):
+        with self.settings(
+            FIELD_ENCRYPTION_KEY="legacy-field-key",
+            FIELD_ENCRYPTION_KEYS={},
+            FIELD_ENCRYPTION_ACTIVE_KEY="",
+            FIELD_ENCRYPTION_DEDICATED_KEY_CONFIGURED=True,
+        ):
+            legacy_encrypted = encrypt_text("Please book a support session.", force_reencrypt=True)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO cases_studentrequest
+                (created_at, updated_at, submitted_by_name, submitted_by_email, title, student_identifier, request_type, details, status, student_id, assigned_to_id, preferred_date, preferred_time, status_before_close, internal_notes, confirmation_sent_at, closed_by_id, closed_at)
+                VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, NULL, NULL, NULL)
+                """,
+                [
+                    "Jamie Student",
+                    "jamie@example.com",
+                    "Need counselling",
+                    self.student.student_id,
+                    StudentRequest.REQUEST_COUNSELLING,
+                    legacy_encrypted,
+                    StudentRequest.STATUS_NEW,
+                    self.student.pk,
+                    self.counsellor.pk,
+                    "",
+                    "",
+                    "",
+                ],
+            )
+        request_item = StudentRequest.objects.latest("id")
+        self.assertEqual(request_item.details, "Please book a support session.")
+        self.assertEqual(encrypted_text_version(legacy_encrypted), "legacy")
+
+        call_command("rotate_sensitive_field_encryption")
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT details FROM cases_studentrequest WHERE id = %s", [request_item.pk])
+            rotated_value = cursor.fetchone()[0]
+        self.assertEqual(encrypted_text_version(rotated_value), "primary")
+        self.assertEqual(decrypt_text(rotated_value), "Please book a support session.")
 
     def test_counsellor_can_see_public_student_requests_in_queue(self):
         StudentRequest.objects.create(
@@ -590,6 +736,53 @@ class CaseTrackerSmokeTests(TestCase):
         response = client.get(reverse("dashboard"), REMOTE_ADDR="198.51.100.20")
         self.assertRedirects(response, reverse("login"))
 
+    def test_emergency_lockdown_blocks_non_admin_login(self):
+        policy = SecurityPolicy.get_solo()
+        policy.emergency_lockdown_enabled = True
+        policy.emergency_lockdown_message = "The system is temporarily locked for security review."
+        policy.save()
+        response = self.client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "temporarily locked for security review")
+        self.assertTrue(
+            AuditLog.objects.filter(model_name="SecurityEvent", action="login_blocked", details__section="emergency_lockdown").exists()
+        )
+
+    def test_emergency_lockdown_ends_existing_non_admin_session(self):
+        policy = SecurityPolicy.get_solo()
+        policy.emergency_lockdown_enabled = True
+        policy.save()
+        client = Client()
+        client.login(username="counsellor", password="pass12345")
+        response = client.get(reverse("dashboard"))
+        self.assertRedirects(response, reverse("login"))
+
+    def test_emergency_lockdown_pauses_public_request_form(self):
+        policy = SecurityPolicy.get_solo()
+        policy.emergency_lockdown_enabled = True
+        policy.emergency_lockdown_message = "Public requests are paused for the moment."
+        policy.save()
+        response = self.client.get(reverse("student_request_public"))
+        self.assertEqual(response.status_code, 503)
+        self.assertContains(response, "Requests are temporarily paused", status_code=503)
+        self.assertContains(response, "Public requests are paused for the moment.", status_code=503)
+
+    @override_settings(EMERGENCY_LOCKDOWN_ENV_ENABLED=True)
+    def test_environment_lockdown_blocks_non_admin_login(self):
+        response = self.client.post(reverse("login"), {"username": "counsellor", "password": "pass12345"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "emergency security mode")
+
+    def test_lockdown_file_appears_in_health_ready_sources(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lockdown_file = Path(temp_dir) / "EMERGENCY_LOCKDOWN"
+            lockdown_file.write_text("lockdown", encoding="utf-8")
+            with self.settings(EMERGENCY_LOCKDOWN_FILE=str(lockdown_file)):
+                response = self.client.get(reverse("health_ready"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["emergency_lockdown_active"], True)
+        self.assertIn("lockdown_file", response.json()["emergency_lockdown_sources"])
+
     def test_staff_local_login_can_be_disabled_for_school_managed_auth(self):
         policy = SecurityPolicy.get_solo()
         policy.require_school_managed_auth_for_staff = True
@@ -751,10 +944,16 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.json()["governance_ready"], True)
         self.assertIn("deployment_security_ready", response.json())
         self.assertIn("deployment_security_checks", response.json())
+        self.assertIn("emergency_lockdown_active", response.json())
+        self.assertIn("emergency_lockdown_sources", response.json())
 
     @override_settings(
         DEBUG=False,
         SECRET_KEY="production-secret-key",
+        FIELD_ENCRYPTION_KEY="separate-field-key",
+        FIELD_ENCRYPTION_KEYS={"primary": "primary-field-key", "prior": "prior-field-key"},
+        FIELD_ENCRYPTION_ACTIVE_KEY="primary",
+        FIELD_ENCRYPTION_DEDICATED_KEY_CONFIGURED=True,
         SESSION_COOKIE_SECURE=True,
         CSRF_COOKIE_SECURE=True,
         SECURE_SSL_REDIRECT=True,
@@ -768,6 +967,10 @@ class CaseTrackerSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Deployment security posture")
         self.assertContains(response, "Encrypted exports")
+        self.assertContains(response, "Sensitive field encryption")
+        self.assertContains(response, "Separate field key")
+        self.assertContains(response, "Field key rotation")
+        self.assertContains(response, "Outside lockdown control")
         self.assertContains(response, "Ready")
 
     def test_admin_can_end_current_access_for_account(self):
